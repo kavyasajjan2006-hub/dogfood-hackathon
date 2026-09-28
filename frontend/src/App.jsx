@@ -1,31 +1,57 @@
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
-
-import Landing from "./pages/Landing.jsx";
-import Dashboard from "./pages/Dashboard.jsx";
-import SubmitProject from "./pages/SubmitProject.jsx";
-import Projects from "./pages/Projects.jsx";
-import Judging from "./pages/Judging.jsx";
-import Leaderboard from "./pages/Leaderboard.jsx";
-
-import "./App.css";
+import Landing from "./pages/Landing";
+import Dashboard from "./pages/Dashboard";
+import SubmitProject from "./pages/SubmitProject";
+import Projects from "./pages/Projects";
+import Judging from "./pages/Judging";
+import Leaderboard from "./pages/Leaderboard";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/submit-project" element={<SubmitProject />} />
-        <Route path="/projects" element={<Projects />} />
-        <Route path="/judging" element={<Judging />} />
-        <Route path="/leaderboard" element={<Leaderboard />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+
+        <Route
+          path="/"
+          element={<Landing />}
+        />
+
+        <Route
+          path="/dashboard"
+          element={<Dashboard />}
+        />
+
+        <Route
+          path="/submit-project"
+          element={<SubmitProject />}
+        />
+
+        <Route
+          path="/projects"
+          element={<Projects />}
+        />
+
+        <Route
+          path="/judging"
+          element={<Judging />}
+        />
+
+        <Route
+          path="/leaderboard"
+          element={<Leaderboard />}
+        />
+
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to="/"
+              replace
+            />
+          }
+        />
+
       </Routes>
     </BrowserRouter>
   );

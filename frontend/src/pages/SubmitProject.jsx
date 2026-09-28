@@ -1,19 +1,28 @@
-import { addProject } from "../utils/projectStorage";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
   CheckCircle,
   Code2,
-  
   ExternalLink,
   Send,
 } from "lucide-react";
 import "./SubmitProject.css";
 
+import {
+  getHackathons,
+  createProject,
+  submitProject,
+} from "../utils/api";
+
 function SubmitProject() {
   const navigate = useNavigate();
+
+  const [hackathons, setHackathons] = useState([]);
+  const [loadingHackathons, setLoadingHackathons] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [serverError, setServerError] = useState("");
 
   const [form, setForm] = useState({
     projectName: "",
@@ -29,6 +38,22 @@ function SubmitProject() {
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
 
+  // Load hackathons from backend
+  useEffect(() => {
+    async function loadHackathons() {
+      try {
+        const data = await getHackathons();
+        setHackathons(data.hackathons || []);
+      } catch (error) {
+        setServerError("Unable to load hackathons from the backend.");
+      } finally {
+        setLoadingHackathons(false);
+      }
+    }
+
+    loadHackathons();
+  }, []);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -41,6 +66,8 @@ function SubmitProject() {
       ...prev,
       [name]: "",
     }));
+
+    setServerError("");
   };
 
   const validate = () => {
@@ -61,17 +88,16 @@ function SubmitProject() {
     if (!form.description.trim()) {
       newErrors.description = "Project description is required.";
     } else if (form.description.trim().length < 30) {
-      newErrors.description =
-        "Please provide at least 30 characters.";
+      newErrors.description = "Please provide at least 30 characters.";
     }
 
     if (!form.technologies.trim()) {
-      newErrors.technologies =
-        "Enter at least one technology.";
+      newErrors.technologies = "Enter at least one technology.";
     }
 
     const validUrl = (value) => {
       if (!value.trim()) return true;
+
       try {
         const url = new URL(value);
         return url.protocol === "https:" || url.protocol === "http:";
@@ -89,27 +115,81 @@ function SubmitProject() {
     }
 
     setErrors(newErrors);
+
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
-  e.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-  if (!validate()) return;
+    if (!validate()) return;
 
-  addProject({
-    projectName: formData.projectName,
-    hackathon: formData.hackathon,
-    teamName: formData.teamName,
-    description: formData.description,
-    technologies: formData.technologies,
-    teamMembers: formData.teamMembers,
-    githubUrl: formData.githubUrl,
-    demoUrl: formData.demoUrl,
-  });
+    setSubmitting(true);
+    setServerError("");
 
-  setSubmitted(true);
-};
+    try {
+      /*
+       * For the current hackathon demo we use the seeded
+       * participant account and Team Dogfood.
+       *
+       * Later we will replace this with the real login/team flow.
+       */
+      let token = localStorage.getItem("token");
+
+      // Temporary demo login
+      if (!token) {
+        const loginResponse = await fetch(
+          "http://localhost:5000/api/auth/login",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: "participant@dogfood.local",
+              password: "participant123",
+            }),
+          }
+        );
+
+        const loginData = await loginResponse.json();
+
+        if (!loginResponse.ok) {
+          throw new Error(
+            loginData.message || "Demo login failed."
+          );
+        }
+
+        token = loginData.token;
+        localStorage.setItem("token", token);
+      }
+
+      // Create project in backend
+      const projectData = await createProject(
+        {
+          hackathon_id: Number(form.hackathon),
+          team_id: 1,
+          name: form.projectName.trim(),
+          description: form.description.trim(),
+          technologies: form.technologies.trim(),
+          repository_url: form.github.trim(),
+          demo_url: form.demo.trim(),
+        },
+        token
+      );
+
+      // Submit project
+      await submitProject(projectData.project.id, token);
+
+      setSubmitted(true);
+    } catch (error) {
+      setServerError(
+        error.message || "Unable to submit project."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const resetForm = () => {
     setForm({
@@ -122,7 +202,9 @@ function SubmitProject() {
       github: "",
       demo: "",
     });
+
     setErrors({});
+    setServerError("");
     setSubmitted(false);
   };
 
@@ -133,18 +215,25 @@ function SubmitProject() {
           <div className="success-icon">
             <CheckCircle size={48} />
           </div>
+
           <h1>Project submitted!</h1>
+
           <p>
-            Your project details have passed the form
-            validation. Database submission will be
-            available after backend integration.
+            Your project has been successfully submitted to the
+            backend for evaluation.
           </p>
 
           <div className="success-summary">
             <span>Project name</span>
             <strong>{form.projectName}</strong>
+
             <span>Hackathon</span>
-            <strong>{form.hackathon}</strong>
+            <strong>
+              {hackathons.find(
+                (h) => String(h.id) === String(form.hackathon)
+              )?.name || "Selected Hackathon"}
+            </strong>
+
             <span>Team</span>
             <strong>{form.teamName}</strong>
           </div>
@@ -156,6 +245,7 @@ function SubmitProject() {
             >
               Go to Dashboard <ArrowRight size={17} />
             </button>
+
             <button
               className="submit-secondary-btn"
               onClick={resetForm}
@@ -171,6 +261,7 @@ function SubmitProject() {
   return (
     <div className="submit-page">
       <div className="submit-container">
+
         <button
           className="back-button"
           onClick={() => navigate("/dashboard")}
@@ -182,20 +273,39 @@ function SubmitProject() {
           <div className="submit-heading-icon">
             <Code2 size={25} />
           </div>
+
           <div>
             <h1>Submit Your Project</h1>
             <p>
-              Share your idea, showcase your work and
-              submit your project for evaluation.
+              Share your idea, showcase your work and submit your
+              project for evaluation.
             </p>
           </div>
         </div>
 
-        <form className="submit-form" onSubmit={handleSubmit}>
+        {serverError && (
+          <div
+            style={{
+              marginBottom: "20px",
+              padding: "12px 16px",
+              borderRadius: "8px",
+              background: "#fee2e2",
+              color: "#991b1b",
+            }}
+          >
+            {serverError}
+          </div>
+        )}
+
+        <form
+          className="submit-form"
+          onSubmit={handleSubmit}
+        >
           {/* Project information */}
           <section className="form-section">
             <div className="form-section-heading">
               <span className="section-number">01</span>
+
               <div>
                 <h2>Project Information</h2>
                 <p>Tell us about your project.</p>
@@ -206,6 +316,7 @@ function SubmitProject() {
               <label htmlFor="projectName">
                 Project Name <span>*</span>
               </label>
+
               <input
                 id="projectName"
                 name="projectName"
@@ -213,6 +324,7 @@ function SubmitProject() {
                 onChange={handleChange}
                 placeholder="e.g. Smart Waste Management"
               />
+
               {errors.projectName && (
                 <small className="field-error">
                   {errors.projectName}
@@ -224,23 +336,30 @@ function SubmitProject() {
               <label htmlFor="hackathon">
                 Select Hackathon <span>*</span>
               </label>
+
               <select
                 id="hackathon"
                 name="hackathon"
                 value={form.hackathon}
                 onChange={handleChange}
+                disabled={loadingHackathons}
               >
-                <option value="">Choose a hackathon</option>
-                <option value="AI Innovation Challenge">
-                  AI Innovation Challenge
+                <option value="">
+                  {loadingHackathons
+                    ? "Loading hackathons..."
+                    : "Choose a hackathon"}
                 </option>
-                <option value="Smart City Hackathon">
-                  Smart City Hackathon
-                </option>
-                <option value="Green Tech Challenge">
-                  Green Tech Challenge
-                </option>
+
+                {hackathons.map((hackathon) => (
+                  <option
+                    key={hackathon.id}
+                    value={hackathon.id}
+                  >
+                    {hackathon.name}
+                  </option>
+                ))}
               </select>
+
               {errors.hackathon && (
                 <small className="field-error">
                   {errors.hackathon}
@@ -252,6 +371,7 @@ function SubmitProject() {
               <label htmlFor="description">
                 Project Description <span>*</span>
               </label>
+
               <textarea
                 id="description"
                 name="description"
@@ -260,16 +380,16 @@ function SubmitProject() {
                 onChange={handleChange}
                 placeholder="Explain the problem, your solution and how your project works..."
               />
+
               <div className="field-footer">
                 {errors.description ? (
                   <small className="field-error">
                     {errors.description}
                   </small>
                 ) : (
-                  <small>
-                    Minimum 30 characters
-                  </small>
+                  <small>Minimum 30 characters</small>
                 )}
+
                 <small>
                   {form.description.length} characters
                 </small>
@@ -280,18 +400,21 @@ function SubmitProject() {
               <label htmlFor="technologies">
                 Technologies Used <span>*</span>
               </label>
+
               <input
                 id="technologies"
                 name="technologies"
                 value={form.technologies}
                 onChange={handleChange}
-                placeholder="e.g. React, Python, MySQL"
+                placeholder="e.g. React, Node.js, SQLite"
               />
+
               {errors.technologies && (
                 <small className="field-error">
                   {errors.technologies}
                 </small>
               )}
+
               <small className="field-hint">
                 Separate technologies with commas.
               </small>
@@ -302,6 +425,7 @@ function SubmitProject() {
           <section className="form-section">
             <div className="form-section-heading">
               <span className="section-number">02</span>
+
               <div>
                 <h2>Team Details</h2>
                 <p>Provide your team's information.</p>
@@ -312,6 +436,7 @@ function SubmitProject() {
               <label htmlFor="teamName">
                 Team Name <span>*</span>
               </label>
+
               <input
                 id="teamName"
                 name="teamName"
@@ -319,6 +444,7 @@ function SubmitProject() {
                 onChange={handleChange}
                 placeholder="Enter your team name"
               />
+
               {errors.teamName && (
                 <small className="field-error">
                   {errors.teamName}
@@ -330,6 +456,7 @@ function SubmitProject() {
               <label htmlFor="teamMembers">
                 Team Members
               </label>
+
               <textarea
                 id="teamMembers"
                 name="teamMembers"
@@ -338,9 +465,10 @@ function SubmitProject() {
                 onChange={handleChange}
                 placeholder="Enter team member names, separated by commas"
               />
+
               <small className="field-hint">
-                Optional for now. Team registration can be
-                connected to the backend later.
+                Team member management will be connected to the
+                backend separately.
               </small>
             </div>
           </section>
@@ -349,6 +477,7 @@ function SubmitProject() {
           <section className="form-section">
             <div className="form-section-heading">
               <span className="section-number">03</span>
+
               <div>
                 <h2>Project Links</h2>
                 <p>
@@ -359,8 +488,9 @@ function SubmitProject() {
 
             <div className="form-field">
               <label htmlFor="github">
-                 <Code2 size={16} /> GitHub Repository
-            </label>
+                <Code2 size={16} /> GitHub Repository
+              </label>
+
               <input
                 id="github"
                 name="github"
@@ -369,6 +499,7 @@ function SubmitProject() {
                 onChange={handleChange}
                 placeholder="https://github.com/username/project"
               />
+
               {errors.github && (
                 <small className="field-error">
                   {errors.github}
@@ -380,6 +511,7 @@ function SubmitProject() {
               <label htmlFor="demo">
                 <ExternalLink size={16} /> Live Demo
               </label>
+
               <input
                 id="demo"
                 name="demo"
@@ -388,6 +520,7 @@ function SubmitProject() {
                 onChange={handleChange}
                 placeholder="https://your-project.com"
               />
+
               {errors.demo && (
                 <small className="field-error">
                   {errors.demo}
@@ -401,8 +534,14 @@ function SubmitProject() {
               <span className="required-star">*</span>
               Required fields
             </span>
-            <button type="submit" className="submit-primary-btn">
-              Submit Project <Send size={16} />
+
+            <button
+              type="submit"
+              className="submit-primary-btn"
+              disabled={submitting}
+            >
+              {submitting ? "Submitting..." : "Submit Project"}
+              {!submitting && <Send size={16} />}
             </button>
           </div>
         </form>

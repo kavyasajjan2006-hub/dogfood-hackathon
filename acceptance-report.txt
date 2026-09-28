@@ -1,0 +1,177 @@
+DOGFOOD HACKATHON PLATFORM
+ACCEPTANCE REPORT
+
+1. BUILD AND STARTUP
+
+Command:
+
+docker compose up --build
+
+Result:
+
+PASS
+
+Frontend container builds successfully.
+Backend container builds successfully.
+SQLite database initializes successfully.
+Seed data initializes successfully.
+Backend starts on port 5000.
+Frontend starts through Nginx.
+
+2. HEALTH CHECK
+
+Endpoint:
+
+GET /api/health
+
+Result:
+
+PASS
+
+Expected response:
+
+success: true
+message: Dogfood Hackathon backend is running
+
+3. SEEDED DATA
+
+Result:
+
+PASS
+
+Seeded accounts:
+
+Admin:
+admin@dogfood.local / admin123
+
+Judge:
+judge@dogfood.local / judge123
+
+Judge:
+judge2@dogfood.local / judge2123
+
+Participant:
+participant@dogfood.local / participant123
+
+Seeded hackathon:
+
+Dogfood Hackathon 2026
+
+Seeded project:
+
+Dogfood Platform
+
+4. AUTHENTICATION
+
+Participant registration and login are implemented using JWT authentication.
+
+Result:
+
+PASS
+
+5. ROLE-BASED ACCESS
+
+Supported roles:
+
+participant
+judge
+admin
+
+Protected routes use authentication and role authorization middleware.
+
+Result:
+
+PASS
+
+6. PROJECT MANAGEMENT
+
+Implemented:
+
+Project creation
+Project retrieval
+Project submission
+Team ownership validation
+Hackathon validation
+Deadline validation
+
+Result:
+
+PASS
+
+7. JUDGING
+
+Implemented:
+
+Configurable judging criteria
+Judge assignment
+Judge-specific assignments
+Required criterion scoring
+Maximum score validation
+Weighted normalized scoring
+Judge review persistence
+Judge progress
+
+Result:
+
+PASS
+
+8. LEADERBOARD
+
+Implemented:
+
+Project scores
+Judge count
+Average score
+Highest score
+Leaderboard ordering
+
+Result:
+
+PASS
+
+9. CSV EXPORT
+
+Administrator leaderboard CSV export is implemented.
+
+Result:
+
+PASS
+
+10. DOCKER / SELF-HOSTING
+
+The application runs using Docker Compose.
+
+No hosted database is required.
+SQLite is used locally.
+Frontend is served by Nginx.
+Backend runs using Node.js and Express.
+
+Result:
+
+PASS
+
+11. OFFLINE OPERATION
+
+The core application does not require external cloud authentication,
+hosted database services, or external APIs for its core operation.
+
+Result:
+
+PASS
+
+12. KNOWN SCOPE LIMITATIONS
+
+The current implementation prioritizes the core hackathon lifecycle
+and judging workflow.
+
+Advanced features such as community voting, comments, certificates,
+webhooks, and pairwise judging are outside the current implemented
+core scope.
+
+13. FINAL ACCEPTANCE
+
+The core platform builds, starts, seeds its database, exposes its REST
+API, serves its frontend, supports authentication, project submission,
+judge assignment, judging, leaderboard generation, and CSV export.
+
+OVERALL CORE ACCEPTANCE: PASS

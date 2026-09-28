@@ -28,6 +28,7 @@ function getCriteria(req, res) {
 function createCriteria(req, res) {
     try {
         const { hackathon_id } = req.params;
+
         const {
             name,
             description,
@@ -43,6 +44,22 @@ function createCriteria(req, res) {
             });
         }
 
+        const maxScore = Number(max_score ?? 25);
+        const criterionWeight = Number(weight ?? 1);
+        const displayOrder = Number(display_order ?? 0);
+
+        if (
+            Number.isNaN(maxScore) ||
+            maxScore <= 0 ||
+            Number.isNaN(criterionWeight) ||
+            criterionWeight <= 0
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "max_score and weight must be positive numbers"
+            });
+        }
+
         const result = db.prepare(`
             INSERT INTO judging_criteria (
                 hackathon_id,
@@ -55,11 +72,11 @@ function createCriteria(req, res) {
             VALUES (?, ?, ?, ?, ?, ?)
         `).run(
             hackathon_id,
-            name,
+            name.trim(),
             description || null,
-            max_score || 25,
-            weight || 1,
-            display_order || 0
+            maxScore,
+            criterionWeight,
+            displayOrder
         );
 
         const criteria = db.prepare(`
@@ -109,7 +126,7 @@ function assignJudge(req, res) {
         }
 
         const project = db.prepare(`
-            SELECT id
+            SELECT id, hackathon_id
             FROM projects
             WHERE id = ?
         `).get(project_id);
@@ -169,12 +186,17 @@ function getMyAssignments(req, res) {
                 ja.status,
                 ja.assigned_at,
                 p.name AS project_name,
+                p.hackathon_id,
                 p.description,
                 p.technologies,
                 p.repository_url,
-                p.demo_url
+                p.demo_url,
+                t.name AS team_name,
+                h.name AS hackathon_name
             FROM judge_assignments ja
             JOIN projects p ON ja.project_id = p.id
+            LEFT JOIN teams t ON p.team_id = t.id
+            LEFT JOIN hackathons h ON p.hackathon_id = h.id
             WHERE ja.judge_id = ?
             ORDER BY ja.assigned_at DESC
         `).all(req.user.id);
@@ -218,21 +240,68 @@ function submitReview(req, res) {
             });
         }
 
+        const project = db.prepare(`
+            SELECT id, hackathon_id
+            FROM projects
+            WHERE id = ?
+        `).get(project_id);
+
+        if (!project) {
+            return res.status(404).json({
+                success: false,
+                message: "Project not found"
+            });
+        }
+
         const criteria = db.prepare(`
             SELECT *
             FROM judging_criteria
-            WHERE hackathon_id = (
-                SELECT hackathon_id
-                FROM projects
-                WHERE id = ?
-            )
-        `).all(project_id);
+            WHERE hackathon_id = ?
+            ORDER BY display_order, id
+        `).all(project.hackathon_id);
 
-        let totalScore = 0;
+        if (criteria.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "No judging criteria configured for this hackathon"
+            });
+        }
+
+        /*
+         * Every configured criterion must receive a score.
+         * This prevents incomplete evaluations.
+         */
+        const submittedCriterionIds = new Set(
+            scores.map(item => Number(item.criterion_id))
+        );
+
+        for (const criterion of criteria) {
+            if (!submittedCriterionIds.has(Number(criterion.id))) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Score is required for ${criterion.name}`
+                });
+            }
+        }
+
+        /*
+         * Weighted scoring:
+         *
+         * Each criterion is converted to a percentage of its
+         * maximum score, then multiplied by its configured weight.
+         *
+         * Example:
+         * Innovation: 20/25 with weight 2
+         * Technical: 22/25 with weight 3
+         *
+         * Final score is normalized to a 100-point scale.
+         */
+        let weightedScore = 0;
+        let totalWeight = 0;
 
         for (const item of scores) {
             const criterion = criteria.find(
-                criterion => criterion.id === Number(item.criterion_id)
+                c => Number(c.id) === Number(item.criterion_id)
             );
 
             if (!criterion) {
@@ -243,11 +312,13 @@ function submitReview(req, res) {
             }
 
             const score = Number(item.score);
+            const maxScore = Number(criterion.max_score);
+            const weight = Number(criterion.weight || 1);
 
             if (
                 Number.isNaN(score) ||
                 score < 0 ||
-                score > criterion.max_score
+                score > maxScore
             ) {
                 return res.status(400).json({
                     success: false,
@@ -255,8 +326,23 @@ function submitReview(req, res) {
                 });
             }
 
-            totalScore += score;
+            if (weight <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Invalid weight for ${criterion.name}`
+                });
+            }
+
+            const percentageScore = score / maxScore;
+
+            weightedScore += percentageScore * weight;
+            totalWeight += weight;
         }
+
+        const totalScore =
+            totalWeight > 0
+                ? Number(((weightedScore / totalWeight) * 100).toFixed(2))
+                : 0;
 
         const transaction = db.transaction(() => {
             const existingReview = db.prepare(`
@@ -317,8 +403,8 @@ function submitReview(req, res) {
             for (const item of scores) {
                 insertScore.run(
                     reviewId,
-                    item.criterion_id,
-                    item.score
+                    Number(item.criterion_id),
+                    Number(item.score)
                 );
             }
 
@@ -337,7 +423,11 @@ function submitReview(req, res) {
         res.json({
             success: true,
             message: "Review submitted successfully",
-            total_score: totalScore
+            total_score: totalScore,
+            scoring: {
+                method: "weighted_normalized",
+                scale: 100
+            }
         });
     } catch (error) {
         console.error("Submit review error:", error);
@@ -380,11 +470,64 @@ function getMyReviews(req, res) {
     }
 }
 
+/*
+ * Judge progress dashboard.
+ *
+ * Returns:
+ * - total assigned projects
+ * - completed evaluations
+ * - pending evaluations
+ * - completion percentage
+ */
+function getMyProgress(req, res) {
+    try {
+        const stats = db.prepare(`
+            SELECT
+                COUNT(*) AS total_assignments,
+                SUM(
+                    CASE
+                        WHEN status = 'completed' THEN 1
+                        ELSE 0
+                    END
+                ) AS completed_assignments
+            FROM judge_assignments
+            WHERE judge_id = ?
+        `).get(req.user.id);
+
+        const total = Number(stats.total_assignments || 0);
+        const completed = Number(stats.completed_assignments || 0);
+        const pending = total - completed;
+
+        const percentage =
+            total > 0
+                ? Number(((completed / total) * 100).toFixed(2))
+                : 0;
+
+        res.json({
+            success: true,
+            progress: {
+                total_assignments: total,
+                completed_assignments: completed,
+                pending_assignments: pending,
+                completion_percentage: percentage
+            }
+        });
+    } catch (error) {
+        console.error("Get judge progress error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch judge progress"
+        });
+    }
+}
+
 module.exports = {
     getCriteria,
     createCriteria,
     assignJudge,
     getMyAssignments,
     submitReview,
-    getMyReviews
+    getMyReviews,
+    getMyProgress
 };

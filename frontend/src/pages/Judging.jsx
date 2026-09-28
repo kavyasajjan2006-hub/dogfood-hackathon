@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -10,68 +9,54 @@ import {
   CheckCircle,
 } from "lucide-react";
 import {
-  getProjects,
-  getEvaluations,
-  saveEvaluations,
-} from "../utils/projectStorage";
+  getMyAssignments,
+  getCriteria,
+  submitReview,
+} from "../utils/api";
 import "./Judging.css";
 
-const initialProjects = [
+const criteriaFallback = [
   {
     id: 1,
-    name: "Smart Waste Management",
-    team: "EcoTech",
-    hackathon: "Green Tech Challenge",
-    description:
-      "An intelligent waste management system that helps monitor waste collection and improve recycling.",
-    technologies: ["React", "Python", "MySQL"],
+    name: "Innovation",
+    description: "Originality and creativity of the idea",
+    max_score: 25,
   },
   {
     id: 2,
-    name: "AI Health Assistant",
-    team: "Innovators",
-    hackathon: "AI Innovation Challenge",
-    description:
-      "An AI-powered assistant that provides general health information and helps users understand common health concerns.",
-    technologies: ["React", "Python", "Machine Learning"],
+    name: "Technical Implementation",
+    description: "Quality of implementation and technical execution",
+    max_score: 25,
   },
   {
     id: 3,
-    name: "Smart City Traffic Monitor",
-    team: "CodeStorm",
-    hackathon: "Smart City Hackathon",
-    description:
-      "A traffic monitoring application that uses computer vision to analyze traffic flow and identify congestion.",
-    technologies: ["Python", "OpenCV", "React"],
-  },
-];
-
-const criteria = [
-  {
-    name: "Innovation",
-    description: "Originality and creativity of the idea",
-  },
-  {
-    name: "Technical Implementation",
-    description: "Quality of implementation and technical execution",
-  },
-  {
     name: "Impact",
     description: "Potential usefulness and real-world impact",
+    max_score: 25,
   },
   {
+    id: 4,
     name: "Presentation",
     description: "Clarity and effectiveness of the presentation",
+    max_score: 25,
   },
 ];
 
 function normalizeProject(project) {
   return {
     ...project,
-    name: project.projectName || project.name || "Untitled Project",
-    team: project.teamName || project.team || "Unknown Team",
-    hackathon: project.hackathon || "Unspecified Hackathon",
-    description: project.description || "No description provided.",
+    name: project.name || project.project_name || "Untitled Project",
+    team:
+      project.team_name ||
+      project.teamName ||
+      project.team ||
+      "Unknown Team",
+    hackathon:
+      project.hackathon_name ||
+      project.hackathon ||
+      "Unspecified Hackathon",
+    description:
+      project.description || "No description provided.",
     technologies: Array.isArray(project.technologies)
       ? project.technologies
       : typeof project.technologies === "string"
@@ -86,23 +71,113 @@ function normalizeProject(project) {
 function Judging() {
   const navigate = useNavigate();
 
-  const [evaluations, setEvaluations] = useState(() =>
-    getEvaluations()
-  );
-
-  const [projects, setProjects] = useState(() => {
-    const savedProjects = getProjects().map(normalizeProject);
-    const allProjects = [...initialProjects, ...savedProjects];
-    const completed = getEvaluations();
-
-    return allProjects.filter(
-      (project) => !completed[String(project.id)]
-    );
-  });
+  const [projects, setProjects] = useState([]);
+  const [criteria, setCriteria] = useState(criteriaFallback);
+  const [completedReviews, setCompletedReviews] = useState([]);
 
   const [selected, setSelected] = useState(null);
   const [scores, setScores] = useState({});
-  const [feedback, setFeedback] = useState({});
+  const [feedback, setFeedback] = useState("");
+
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    loadJudgingData();
+  }, []);
+
+  const loadJudgingData = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      let token = localStorage.getItem("judgeToken");
+
+      /*
+       * Temporary seeded judge login for hackathon demo.
+       * Later this will come from the actual login page.
+       */
+      if (!token) {
+        const loginResponse = await fetch(
+          "http://localhost:5000/api/auth/login",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: "judge@dogfood.local",
+              password: "judge123",
+            }),
+          }
+        );
+
+        const loginData = await loginResponse.json();
+
+        if (!loginResponse.ok) {
+          throw new Error(
+            loginData.message || "Judge login failed."
+          );
+        }
+
+        token = loginData.token;
+        localStorage.setItem("judgeToken", token);
+      }
+
+      const assignments = await getMyAssignments(token);
+
+      const assignmentList =
+        assignments.assignments || assignments.projects || [];
+
+      const normalizedProjects = assignmentList
+        .filter(
+          (assignment) =>
+            assignment.status !== "completed"
+        )
+        .map((assignment) =>
+          normalizeProject(
+            assignment.project || assignment
+          )
+        );
+
+      setProjects(normalizedProjects);
+
+      const hackathonIds = [
+        ...new Set(
+          assignmentList
+            .map(
+              (assignment) =>
+                assignment.project?.hackathon_id ||
+                assignment.hackathon_id
+            )
+            .filter(Boolean)
+        ),
+      ];
+
+      if (hackathonIds.length > 0) {
+        const criteriaResponse = await getCriteria(
+          hackathonIds[0],
+          token
+        );
+
+        if (
+          criteriaResponse.criteria &&
+          criteriaResponse.criteria.length > 0
+        ) {
+          setCriteria(criteriaResponse.criteria);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setError(
+        err.message ||
+          "Unable to load judging assignments."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const totalScore = criteria.reduce(
     (total, item) =>
@@ -126,46 +201,66 @@ function Judging() {
   const openEvaluation = (project) => {
     setSelected(project);
     setScores({});
-    setFeedback({});
+    setFeedback("");
+    setError("");
   };
 
   const closeEvaluation = () => {
-    setSelected(null);
+    if (!submitting) {
+      setSelected(null);
+    }
   };
 
-  const submitEvaluation = (e) => {
+  const submitEvaluation = async (e) => {
     e.preventDefault();
 
     if (!selected || !allScoresEntered) return;
 
-    const updatedEvaluations = {
-      ...evaluations,
-      [String(selected.id)]: {
-        project: selected,
-        total: totalScore,
-        scores: { ...scores },
-        feedback: feedback[selected.id] || "",
-        evaluatedAt: new Date().toISOString(),
-      },
-    };
+    setSubmitting(true);
+    setError("");
 
     try {
-      saveEvaluations(updatedEvaluations);
-    } catch (error) {
-      console.error("Unable to save evaluation:", error);
-      alert("Unable to save evaluation. Please try again.");
-      return;
+      const token = localStorage.getItem("judgeToken");
+
+      const scoreList = criteria.map((criterion) => ({
+        criterion_id: criterion.id,
+        score: Number(scores[criterion.name]),
+      }));
+
+      await submitReview(
+        selected.id,
+        {
+          scores: scoreList,
+          feedback: feedback.trim(),
+        },
+        token
+      );
+
+      setCompletedReviews((prev) => [
+        ...prev,
+        selected.id,
+      ]);
+
+      setProjects((prev) =>
+        prev.filter(
+          (project) =>
+            String(project.id) !==
+            String(selected.id)
+        )
+      );
+
+      setSelected(null);
+      setScores({});
+      setFeedback("");
+    } catch (err) {
+      console.error(err);
+      setError(
+        err.message ||
+          "Unable to submit evaluation."
+      );
+    } finally {
+      setSubmitting(false);
     }
-
-    setEvaluations(updatedEvaluations);
-
-    setProjects((prev) =>
-      prev.filter(
-        (project) => String(project.id) !== String(selected.id)
-      )
-    );
-
-    setSelected(null);
   };
 
   return (
@@ -187,17 +282,34 @@ function Judging() {
               </div>
               <h1>Project Judging</h1>
             </div>
+
             <p>
-              Review projects, assign scores and provide feedback.
+              Review projects, assign scores and provide
+              feedback.
             </p>
           </div>
         </div>
+
+        {error && (
+          <div
+            style={{
+              marginBottom: "20px",
+              padding: "12px 16px",
+              borderRadius: "8px",
+              background: "#fee2e2",
+              color: "#991b1b",
+            }}
+          >
+            {error}
+          </div>
+        )}
 
         <div className="judging-stats">
           <div className="judging-stat-card">
             <div className="judging-stat-icon purple">
               <ClipboardCheck size={21} />
             </div>
+
             <div>
               <span>Pending Evaluations</span>
               <strong>{projects.length}</strong>
@@ -208,9 +320,10 @@ function Judging() {
             <div className="judging-stat-icon green">
               <CheckCircle size={21} />
             </div>
+
             <div>
               <span>Completed Evaluations</span>
-              <strong>{Object.keys(evaluations).length}</strong>
+              <strong>{completedReviews.length}</strong>
             </div>
           </div>
         </div>
@@ -218,11 +331,22 @@ function Judging() {
         <div className="judging-section-heading">
           <div>
             <h2>Projects to Evaluate</h2>
-            <p>Select a project to begin its evaluation.</p>
+            <p>
+              Select a project to begin its evaluation.
+            </p>
           </div>
         </div>
 
-        {projects.length > 0 ? (
+        {loading ? (
+          <div className="judging-empty">
+            <ClipboardCheck size={38} />
+            <h2>Loading assignments...</h2>
+            <p>
+              Fetching your assigned projects from the
+              backend.
+            </p>
+          </div>
+        ) : projects.length > 0 ? (
           <div className="judging-project-list">
             {projects.map((project) => (
               <article
@@ -246,15 +370,23 @@ function Judging() {
                   </span>
 
                   <div className="judging-tags">
-                    {project.technologies.map((tech, index) => (
-                      <span key={`${tech}-${index}`}>{tech}</span>
-                    ))}
+                    {project.technologies.map(
+                      (tech, index) => (
+                        <span
+                          key={`${tech}-${index}`}
+                        >
+                          {tech}
+                        </span>
+                      )
+                    )}
                   </div>
                 </div>
 
                 <button
                   className="judging-evaluate-btn"
-                  onClick={() => openEvaluation(project)}
+                  onClick={() =>
+                    openEvaluation(project)
+                  }
                 >
                   Evaluate
                 </button>
@@ -266,24 +398,10 @@ function Judging() {
             <CheckCircle size={38} />
             <h2>All evaluations completed</h2>
             <p>
-              There are no more projects awaiting evaluation.
+              There are no more projects awaiting
+              evaluation.
             </p>
           </div>
-        )}
-
-        {Object.keys(evaluations).length > 0 && (
-          <section className="judging-completed">
-            <h2>Completed Evaluations</h2>
-
-            {Object.entries(evaluations).map(([id, evaluation]) => (
-              <div className="judging-completed-row" key={id}>
-                <span>
-                  {evaluation.project?.name || "Unknown Project"}
-                </span>
-                <strong>{evaluation.total} / 100</strong>
-              </div>
-            ))}
-          </section>
         )}
       </div>
 
@@ -297,16 +415,20 @@ function Judging() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="judging-modal-title"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) =>
+              e.stopPropagation()
+            }
           >
             <div className="judging-modal-header">
               <div>
                 <span className="judging-hackathon">
                   {selected.hackathon}
                 </span>
+
                 <h2 id="judging-modal-title">
                   {selected.name}
                 </h2>
+
                 <p>{selected.team}</p>
               </div>
 
@@ -323,50 +445,70 @@ function Judging() {
             <form onSubmit={submitEvaluation}>
               <div className="judging-modal-body">
                 <h3>Project Description</h3>
+
                 <p className="judging-modal-description">
                   {selected.description}
                 </p>
 
                 <h3>Evaluation Criteria</h3>
+
                 <p className="judging-helper">
-                  Give each criterion a score from 0 to 25.
+                  Give each criterion a score from 0 to
+                  25.
                 </p>
 
                 <div className="judging-criteria">
                   {criteria.map((item) => (
                     <div
                       className="judging-criterion"
-                      key={item.name}
+                      key={item.id || item.name}
                     >
                       <div className="judging-criterion-heading">
                         <div>
-                          <strong>{item.name}</strong>
-                          <small>{item.description}</small>
+                          <strong>
+                            {item.name}
+                          </strong>
+
+                          <small>
+                            {item.description}
+                          </small>
                         </div>
-                        <span>/ 25</span>
+
+                        <span>
+                          / {item.max_score || 25}
+                        </span>
                       </div>
 
                       <div className="judging-score-input">
                         <Star size={17} />
+
                         <input
                           type="number"
                           min="0"
-                          max="25"
+                          max={item.max_score || 25}
                           step="1"
                           required
-                          value={scores[item.name] ?? ""}
+                          value={
+                            scores[item.name] ?? ""
+                          }
                           onChange={(e) => {
-                            const value = e.target.value;
+                            const value =
+                              e.target.value;
 
                             if (
                               value === "" ||
                               (/^\d+$/.test(value) &&
-                                Number(value) <= 25)
+                                Number(value) <=
+                                  (item.max_score ||
+                                    25))
                             ) {
-                              handleScoreChange(item.name, value);
+                              handleScoreChange(
+                                item.name,
+                                value
+                              );
                             }
                           }}
-                          placeholder="0–25"
+                          placeholder="0-25"
                         />
                       </div>
                     </div>
@@ -375,8 +517,10 @@ function Judging() {
 
                 <div className="judging-total">
                   <span>Total Score</span>
+
                   <strong>
-                    {totalScore} <small>/ 100</small>
+                    {totalScore}{" "}
+                    <small>/ 100</small>
                   </strong>
                 </div>
 
@@ -384,15 +528,13 @@ function Judging() {
                   <label htmlFor="judge-feedback">
                     Judge's Feedback
                   </label>
+
                   <textarea
                     id="judge-feedback"
                     rows="4"
-                    value={feedback[selected.id] || ""}
+                    value={feedback}
                     onChange={(e) =>
-                      setFeedback((prev) => ({
-                        ...prev,
-                        [selected.id]: e.target.value,
-                      }))
+                      setFeedback(e.target.value)
                     }
                     placeholder="Share constructive feedback about this project..."
                   />
@@ -404,6 +546,7 @@ function Judging() {
                   type="button"
                   className="judging-cancel-btn"
                   onClick={closeEvaluation}
+                  disabled={submitting}
                 >
                   Cancel
                 </button>
@@ -411,9 +554,14 @@ function Judging() {
                 <button
                   type="submit"
                   className="judging-submit-btn"
-                  disabled={!allScoresEntered}
+                  disabled={
+                    !allScoresEntered ||
+                    submitting
+                  }
                 >
-                  Submit Evaluation
+                  {submitting
+                    ? "Submitting..."
+                    : "Submit Evaluation"}
                 </button>
               </div>
             </form>

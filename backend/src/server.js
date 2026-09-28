@@ -12,7 +12,9 @@ const leaderboardRoutes = require("./routes/leaderboardRoutes");
 const exportRoutes = require("./routes/exportRoutes");
 
 const app = express();
-const PORT = 5000;
+
+const PORT = process.env.PORT || 5000;
+const HOST = process.env.HOST || "0.0.0.0";
 
 app.use(cors());
 app.use(express.json());
@@ -32,6 +34,6 @@ app.use("/api/judging", judgingRoutes);
 app.use("/api/leaderboard", leaderboardRoutes);
 app.use("/api/export", exportRoutes);
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+    console.log(`Server running on http://${HOST}:${PORT}`);
 });

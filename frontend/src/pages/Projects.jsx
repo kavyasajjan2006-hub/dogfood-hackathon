@@ -1,382 +1,554 @@
-import { getProjects } from "../utils/projectStorage";
-import { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowLeft,
-  Code2,
-  ExternalLink,
-  FolderOpen,
   Search,
-  Users,
+  Filter,
+  ExternalLink,
+  GitBranch,
+  Plus,
   X,
+  Users,
+  Calendar,
+  CheckCircle,
+  Clock,
 } from "lucide-react";
-import "./Projects.css";
 
-const sampleProjects = [
-  {
-    id: 1,
-    name: "Smart Waste Management",
-    team: "EcoTech",
-    hackathon: "Green Tech Challenge",
-    description:
-      "An intelligent waste management system that helps monitor waste collection and improve recycling through technology.",
-    technologies: ["React", "Python", "MySQL"],
-    github: "https://github.com/",
-    demo: "",
-    members: ["Aarav", "Priya", "Rahul"],
-  },
-  {
-    id: 2,
-    name: "AI Health Assistant",
-    team: "Innovators",
-    hackathon: "AI Innovation Challenge",
-    description:
-      "An AI-powered assistant that provides general health information and helps users understand common health concerns.",
-    technologies: ["React", "Python", "Machine Learning"],
-    github: "https://github.com/",
-    demo: "",
-    members: ["Ananya", "Kiran"],
-  },
-  {
-    id: 3,
-    name: "Smart City Traffic Monitor",
-    team: "CodeStorm",
-    hackathon: "Smart City Hackathon",
-    description:
-      "A traffic monitoring application that uses computer vision to analyze traffic flow and help identify congestion.",
-    technologies: ["Python", "OpenCV", "React"],
-    github: "https://github.com/",
-    demo: "",
-    members: ["Vikram", "Meera", "Rohan"],
-  },
-  {
-    id: 4,
-    name: "Green Energy Tracker",
-    team: "Future Builders",
-    hackathon: "Green Tech Challenge",
-    description:
-      "A web application for monitoring renewable energy usage and visualizing energy consumption trends.",
-    technologies: ["React", "Node.js", "MySQL"],
-    github: "https://github.com/",
-    demo: "",
-    members: ["Diya", "Arjun"],
-  },
-  {
-    id: 5,
-    name: "AI Study Companion",
-    team: "Tech Minds",
-    hackathon: "AI Innovation Challenge",
-    description:
-      "A learning application that helps students organize study materials and get AI-assisted explanations.",
-    technologies: ["React", "Python", "AI"],
-    github: "https://github.com/",
-    demo: "",
-    members: ["Neha", "Aditya", "Sana"],
-  },
-  {
-    id: 6,
-    name: "Smart Parking System",
-    team: "Byte Builders",
-    hackathon: "Smart City Hackathon",
-    description:
-      "A smart parking concept that helps users find available parking spaces and view parking information.",
-    technologies: ["Python", "IoT", "React"],
-    github: "https://github.com/",
-    demo: "",
-    members: ["Ravi", "Sneha"],
-  },
-];
+import "./Projects.css";
+import { getProjects } from "../utils/api";
 
 function Projects() {
   const navigate = useNavigate();
-  const [submittedProjects] = useState(() =>
-  getProjects().map((project) => ({
-    ...project,
-    name: project.projectName || project.name || "Untitled Project",
-    team: project.teamName || project.team || "Unknown Team",
-    github: project.githubUrl || project.github || "",
-    demo: project.demoUrl || project.demo || "",
-    members: Array.isArray(project.teamMembers)
-      ? project.teamMembers
-      : typeof project.teamMembers === "string"
-        ? project.teamMembers.split(",").map((m) => m.trim()).filter(Boolean)
-        : project.members || [],
-    technologies: Array.isArray(project.technologies)
-      ? project.technologies
-      : typeof project.technologies === "string"
-        ? project.technologies.split(",").map((t) => t.trim()).filter(Boolean)
-        : [],
-  }))
-);
 
-const allProjects = [...submittedProjects, ...sampleProjects];
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const [search, setSearch] = useState("");
-  const [hackathon, setHackathon] = useState("All");
-  const [technology, setTechnology] = useState("All");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [selectedProject, setSelectedProject] = useState(null);
-const hackathons = [
-  "All",
-  ...new Set(allProjects.map((p) => p.hackathon).filter(Boolean)),
-];
 
-const technologies = [
-  "All",
-  ...new Set(allProjects.flatMap((p) => p.technologies)),
-];
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  async function loadProjects() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const data = await getProjects();
+
+      // Backend normally returns an array.
+      // This also handles { projects: [...] } if the response is wrapped.
+      const projectList = Array.isArray(data)
+        ? data
+        : data.projects || [];
+
+      setProjects(projectList);
+    } catch (err) {
+      console.error("Failed to load projects:", err);
+      setError(err.message || "Failed to load projects.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const filteredProjects = useMemo(() => {
-  return allProjects.filter((project) => {
-    const query = search.toLowerCase().trim();
+    return projects.filter((project) => {
+      const projectName =
+        project.name ||
+        project.project_name ||
+        project.title ||
+        "";
 
-    const matchesSearch =
-      project.name.toLowerCase().includes(query) ||
-      project.team.toLowerCase().includes(query) ||
-      project.description.toLowerCase().includes(query);
+      const teamName =
+        project.team_name ||
+        project.teamName ||
+        "";
 
-    const matchesHackathon =
-      hackathon === "All" || project.hackathon === hackathon;
+      const hackathonName =
+        project.hackathon_name ||
+        project.hackathon ||
+        "";
 
-    const matchesTechnology =
-      technology === "All" ||
-      project.technologies.includes(technology);
+      const status =
+        project.status ||
+        (project.submitted ? "submitted" : "draft");
 
+      const searchableText = `
+        ${projectName}
+        ${teamName}
+        ${hackathonName}
+        ${project.description || ""}
+        ${project.technologies || ""}
+      `.toLowerCase();
+
+      const matchesSearch =
+        searchTerm.trim() === "" ||
+        searchableText.includes(searchTerm.toLowerCase());
+
+      const matchesStatus =
+        statusFilter === "all" ||
+        status.toLowerCase() === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [projects, searchTerm, statusFilter]);
+
+  function getProjectName(project) {
     return (
-      matchesSearch &&
-      matchesHackathon &&
-      matchesTechnology
+      project.name ||
+      project.project_name ||
+      project.title ||
+      "Untitled Project"
     );
-  });
-}, [search, hackathon, technology, allProjects.length]);
-  const clearFilters = () => {
-    setSearch("");
-    setHackathon("All");
-    setTechnology("All");
-  };
+  }
+
+  function getTeamName(project) {
+    return (
+      project.team_name ||
+      project.teamName ||
+      "No team"
+    );
+  }
+
+  function getHackathonName(project) {
+    return (
+      project.hackathon_name ||
+      project.hackathon ||
+      "Hackathon"
+    );
+  }
+
+  function getStatus(project) {
+    return (
+      project.status ||
+      (project.submitted ? "submitted" : "draft")
+    ).toLowerCase();
+  }
+
+  function getDescription(project) {
+    return (
+      project.description ||
+      "No description provided."
+    );
+  }
+
+  function getTechnologies(project) {
+    const technologies =
+      project.technologies ||
+      project.tech_stack ||
+      project.techStack ||
+      "";
+
+    if (Array.isArray(technologies)) {
+      return technologies;
+    }
+
+    if (typeof technologies === "string") {
+      return technologies
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    return [];
+  }
+
+  function getGithubUrl(project) {
+    return (
+      project.github_url ||
+      project.github ||
+      project.githubUrl ||
+      ""
+    );
+  }
+
+  function getDemoUrl(project) {
+    return (
+      project.demo_url ||
+      project.demo ||
+      project.demoUrl ||
+      ""
+    );
+  }
+
+  function formatDate(dateValue) {
+    if (!dateValue) return "Not available";
+
+    const date = new Date(dateValue);
+
+    if (Number.isNaN(date.getTime())) {
+      return "Not available";
+    }
+
+    return date.toLocaleDateString();
+  }
+
+  function handleCreateProject() {
+    navigate("/submit-project");
+  }
 
   return (
     <div className="projects-page">
       <div className="projects-container">
-        <button
-          className="projects-back"
-          onClick={() => navigate("/dashboard")}
-        >
-          <ArrowLeft size={17} />
-          Back to Dashboard
-        </button>
 
-        <div className="projects-heading">
+        {/* HEADER */}
+        <div className="projects-header">
           <div>
-            <div className="projects-title-row">
-              <div className="projects-title-icon">
-                <FolderOpen size={24} />
-              </div>
-              <h1>Explore Projects</h1>
-            </div>
+            <h1>Projects</h1>
             <p>
-              Discover innovative ideas and projects built by
-              hackathon teams.
+              Explore projects submitted to your hackathons.
             </p>
           </div>
 
           <button
-            className="projects-submit-btn"
-            onClick={() => navigate("/submit-project")}
+            className="submit-project-btn"
+            onClick={handleCreateProject}
           >
+            <Plus size={18} />
             Submit Project
           </button>
         </div>
 
+        {/* SEARCH + FILTER */}
         <div className="projects-toolbar">
-          <div className="projects-search">
+
+          <div className="search-box">
             <Search size={18} />
+
             <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search projects or teams..."
+              type="text"
+              placeholder="Search projects, teams, hackathons..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
 
-          <div className="projects-filter">
-            <label htmlFor="hackathon-filter">Hackathon</label>
+          <div className="filter-box">
+            <Filter size={18} />
+
             <select
-              id="hackathon-filter"
-              value={hackathon}
-              onChange={(e) => setHackathon(e.target.value)}
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value)
+              }
             >
-              {hackathons.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
+              <option value="all">All Projects</option>
+              <option value="submitted">Submitted</option>
+              <option value="draft">Draft</option>
             </select>
           </div>
 
-          <div className="projects-filter">
-            <label htmlFor="technology-filter">Technology</label>
-            <select
-              id="technology-filter"
-              value={technology}
-              onChange={(e) => setTechnology(e.target.value)}
-            >
-              {technologies.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            className="projects-clear-btn"
-            onClick={clearFilters}
-          >
-            Clear
-          </button>
         </div>
 
-        <div className="projects-results">
-          <span>
-            {filteredProjects.length}{" "}
-            {filteredProjects.length === 1 ? "project" : "projects"} found
-          </span>
-        </div>
+        {/* ERROR */}
+        {error && (
+          <div className="projects-error">
+            <strong>Unable to load projects</strong>
+            <p>{error}</p>
 
-        {filteredProjects.length > 0 ? (
-          <div className="projects-grid">
-            {filteredProjects.map((project) => (
-              <article className="project-card" key={project.id}>
-                <div className="project-card-top">
-                  <div className="project-card-icon">
-                    <Code2 size={22} />
-                  </div>
-                  <span className="project-hackathon">
-                    {project.hackathon}
-                  </span>
-                </div>
-
-                <h2>{project.name}</h2>
-                <p className="project-team">
-                  <Users size={15} />
-                  {project.team}
-                </p>
-
-                <p className="project-description">
-                  {project.description}
-                </p>
-
-                <div className="project-technologies">
-                  {project.technologies.map((tech) => (
-                    <span key={tech}>{tech}</span>
-                  ))}
-                </div>
-
-                <div className="project-card-footer">
-                  <button
-                    className="project-details-btn"
-                    onClick={() => setSelectedProject(project)}
-                  >
-                    View Details
-                  </button>
-
-                  {project.github && (
-                    <a
-                      className="project-link-btn"
-                      href={project.github}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`GitHub for ${project.name}`}
-                    >
-                      <ExternalLink size={17} />
-                    </a>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="projects-empty">
-            <FolderOpen size={38} />
-            <h2>No projects found</h2>
-            <p>Try changing your search or filters.</p>
-            <button onClick={clearFilters}>Clear filters</button>
+            <button onClick={loadProjects}>
+              Try Again
+            </button>
           </div>
         )}
-      </div>
 
-      {selectedProject && (
-        <div
-          className="project-modal-backdrop"
-          onClick={() => setSelectedProject(null)}
-        >
-          <div
-            className="project-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="project-modal-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="project-modal-header">
-              <div>
-                <span className="project-hackathon">
-                  {selectedProject.hackathon}
-                </span>
-                <h2 id="project-modal-title">
-                  {selectedProject.name}
-                </h2>
-              </div>
-              <button
-                className="project-modal-close"
-                onClick={() => setSelectedProject(null)}
-                aria-label="Close project details"
-              >
-                <X size={21} />
-              </button>
-            </div>
+        {/* LOADING */}
+        {loading && (
+          <div className="projects-loading">
+            Loading projects...
+          </div>
+        )}
 
-            <div className="project-modal-body">
-              <p className="project-modal-team">
-                <Users size={17} />
-                {selectedProject.team}
+        {/* PROJECT COUNT */}
+        {!loading && !error && (
+          <div className="projects-count">
+            {filteredProjects.length} project
+            {filteredProjects.length !== 1 ? "s" : ""} found
+          </div>
+        )}
+
+        {/* PROJECTS */}
+        {!loading && !error && filteredProjects.length > 0 && (
+          <div className="projects-grid">
+
+            {filteredProjects.map((project) => {
+              const status = getStatus(project);
+              const technologies = getTechnologies(project);
+
+              return (
+                <div
+                  className="project-card"
+                  key={
+                    project.id ||
+                    project.project_id ||
+                    getProjectName(project)
+                  }
+                >
+
+                  {/* CARD HEADER */}
+                  <div className="project-card-header">
+
+                    <div className="project-icon">
+                      <GitBranch size={22} />
+                    </div>
+
+                    <span
+                      className={`project-status ${status}`}
+                    >
+                      {status === "submitted" ? (
+                        <>
+                          <CheckCircle size={14} />
+                          Submitted
+                        </>
+                      ) : (
+                        <>
+                          <Clock size={14} />
+                          Draft
+                        </>
+                      )}
+                    </span>
+
+                  </div>
+
+                  {/* PROJECT NAME */}
+                  <h2>{getProjectName(project)}</h2>
+
+                  {/* HACKATHON */}
+                  <p className="project-hackathon">
+                    <Calendar size={15} />
+                    {getHackathonName(project)}
+                  </p>
+
+                  {/* TEAM */}
+                  <p className="project-team">
+                    <Users size={15} />
+                    {getTeamName(project)}
+                  </p>
+
+                  {/* DESCRIPTION */}
+                  <p className="project-description">
+                    {getDescription(project)}
+                  </p>
+
+                  {/* TECHNOLOGIES */}
+                  {technologies.length > 0 && (
+                    <div className="technology-list">
+                      {technologies.slice(0, 5).map(
+                        (technology, index) => (
+                          <span
+                            className="technology-tag"
+                            key={`${technology}-${index}`}
+                          >
+                            {technology}
+                          </span>
+                        )
+                      )}
+                    </div>
+                  )}
+
+                  {/* DATE */}
+                  {project.submitted_at && (
+                    <div className="project-date">
+                      Submitted:{" "}
+                      {formatDate(project.submitted_at)}
+                    </div>
+                  )}
+
+                  {/* ACTIONS */}
+                  <div className="project-actions">
+
+                    <button
+                      className="view-project-btn"
+                      onClick={() =>
+                        setSelectedProject(project)
+                      }
+                    >
+                      View Details
+                    </button>
+
+                    {getGithubUrl(project) && (
+                      <a
+                        className="icon-link"
+                        href={getGithubUrl(project)}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="GitHub Repository"
+                      >
+                        <GitBranch size={18} />
+                      </a>
+                    )}
+
+                    {getDemoUrl(project) && (
+                      <a
+                        className="icon-link"
+                        href={getDemoUrl(project)}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Live Demo"
+                      >
+                        <ExternalLink size={18} />
+                      </a>
+                    )}
+
+                  </div>
+
+                </div>
+              );
+            })}
+
+          </div>
+        )}
+
+        {/* NO PROJECTS */}
+        {!loading &&
+          !error &&
+          filteredProjects.length === 0 && (
+            <div className="no-projects">
+
+              <GitBranch size={42} />
+
+              <h2>No projects found</h2>
+
+              <p>
+                {projects.length === 0
+                  ? "No projects have been submitted yet."
+                  : "Try changing your search or filter."}
               </p>
 
-              <h3>About the project</h3>
-              <p>{selectedProject.description}</p>
+              {projects.length === 0 && (
+                <button
+                  onClick={handleCreateProject}
+                  className="submit-project-btn"
+                >
+                  <Plus size={18} />
+                  Submit Your First Project
+                </button>
+              )}
 
-              <h3>Technologies</h3>
-              <div className="project-technologies">
-                {selectedProject.technologies.map((tech) => (
-                  <span key={tech}>{tech}</span>
-                ))}
-              </div>
-
-              <h3>Team members</h3>
-              <p>{selectedProject.members.join(", ")}</p>
-
-              <div className="project-modal-links">
-                {selectedProject.github && (
-                  <a
-                    href={selectedProject.github}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    GitHub Repository <ExternalLink size={15} />
-                  </a>
-                )}
-
-                {selectedProject.demo && (
-                  <a
-                    href={selectedProject.demo}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Live Demo <ExternalLink size={15} />
-                  </a>
-                )}
-              </div>
             </div>
+          )}
+
+      </div>
+
+      {/* PROJECT DETAILS MODAL */}
+      {selectedProject && (
+        <div
+          className="project-modal-overlay"
+          onClick={() => setSelectedProject(null)}
+        >
+
+          <div
+            className="project-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+
+            <button
+              className="modal-close"
+              onClick={() => setSelectedProject(null)}
+            >
+              <X size={22} />
+            </button>
+
+            <div className="project-modal-icon">
+              <GitBranch size={26} />
+            </div>
+
+            <h2>
+              {getProjectName(selectedProject)}
+            </h2>
+
+            <p className="modal-hackathon">
+              {getHackathonName(selectedProject)}
+            </p>
+
+            <div className="modal-section">
+
+              <h3>Team</h3>
+
+              <p>
+                <Users size={16} />
+                {getTeamName(selectedProject)}
+              </p>
+
+            </div>
+
+            <div className="modal-section">
+
+              <h3>Description</h3>
+
+              <p>
+                {getDescription(selectedProject)}
+              </p>
+
+            </div>
+
+            {getTechnologies(selectedProject).length >
+              0 && (
+              <div className="modal-section">
+
+                <h3>Technologies</h3>
+
+                <div className="technology-list">
+                  {getTechnologies(selectedProject).map(
+                    (technology, index) => (
+                      <span
+                        className="technology-tag"
+                        key={`${technology}-${index}`}
+                      >
+                        {technology}
+                      </span>
+                    )
+                  )}
+                </div>
+
+              </div>
+            )}
+
+            <div className="modal-section">
+
+              <h3>Status</h3>
+
+              <p>
+                {getStatus(selectedProject) ===
+                "submitted"
+                  ? "Submitted"
+                  : "Draft"}
+              </p>
+
+            </div>
+
+            <div className="modal-links">
+
+              {getGithubUrl(selectedProject) && (
+                <a
+                  href={getGithubUrl(selectedProject)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="modal-link"
+                >
+                  <GitBranch size={18} />
+                  GitHub Repository
+                </a>
+              )}
+
+              {getDemoUrl(selectedProject) && (
+                <a
+                  href={getDemoUrl(selectedProject)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="modal-link"
+                >
+                  <ExternalLink size={18} />
+                  Live Demo
+                </a>
+              )}
+
+            </div>
+
           </div>
+
         </div>
       )}
     </div>

@@ -1,235 +1,281 @@
-import { getEvaluations } from "../utils/projectStorage";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Trophy,
-  Medal,
   ArrowLeft,
-  ExternalLink,
+  Medal,
   Search,
+  Trophy,
+  Users,
+  RefreshCw,
 } from "lucide-react";
-import { useState } from "react";
+import { getHackathons, getLeaderboard } from "../utils/api";
 import "./Leaderboard.css";
-
-const initialProjects = [
-  {
-    id: 1,
-    name: "Smart Traffic AI",
-    team: "Code Warriors",
-    hackathon: "AI Innovation Challenge",
-    score: 95,
-    members: 4,
-  },
-  {
-    id: 2,
-    name: "HealthCare Connect",
-    team: "Tech Titans",
-    hackathon: "AI Innovation Challenge",
-    score: 91,
-    members: 3,
-  },
-  {
-    id: 3,
-    name: "EcoTrack",
-    team: "Green Coders",
-    hackathon: "Green Tech Hackathon",
-    score: 87,
-    members: 4,
-  },
-  {
-    id: 4,
-    name: "Campus Companion",
-    team: "Byte Builders",
-    hackathon: "College Hackathon",
-    score: 82,
-    members: 3,
-  },
-  {
-    id: 5,
-    name: "AgriVision",
-    team: "Future Minds",
-    hackathon: "Green Tech Hackathon",
-    score: 78,
-    members: 4,
-  },
-];
-
 
 function Leaderboard() {
   const navigate = useNavigate();
+
+  const [hackathons, setHackathons] = useState([]);
+  const [selectedHackathon, setSelectedHackathon] = useState("");
+  const [projects, setProjects] = useState([]);
   const [search, setSearch] = useState("");
 
-  const evaluations = getEvaluations();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const evaluatedProjects = Object.values(evaluations)
-  .map((evaluation) => ({
-    ...evaluation.project,
-    score: evaluation.total,
-  }));
+  useEffect(() => {
+    loadHackathons();
+  }, []);
 
-const evaluatedIds = new Set(
-  evaluatedProjects.map((project) => String(project.id))
-);
+  useEffect(() => {
+    if (selectedHackathon) {
+      loadLeaderboard(selectedHackathon);
+    }
+  }, [selectedHackathon]);
 
-const projects = [
-  ...initialProjects.filter(
-    (project) => !evaluatedIds.has(String(project.id))
-  ),
-  ...evaluatedProjects,
-].sort((a, b) => b.score - a.score);
+  async function loadHackathons() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const data = await getHackathons();
+
+      const list = data.hackathons || [];
+      setHackathons(list);
+
+      if (list.length > 0) {
+        setSelectedHackathon(String(list[0].id));
+      }
+    } catch (err) {
+      setError(err.message || "Unable to load hackathons.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadLeaderboard(id) {
+    try {
+      setLoading(true);
+      setError("");
+
+      const data = await getLeaderboard(id);
+
+      setProjects(data.leaderboard || data.projects || []);
+    } catch (err) {
+      setError(err.message || "Unable to load leaderboard.");
+      setProjects([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const filteredProjects = projects.filter((project) =>
-    `${project.name} ${project.team} ${project.hackathon}`
+    String(
+      project.project_name ||
+        project.name ||
+        ""
+    )
       .toLowerCase()
       .includes(search.toLowerCase())
   );
 
-  const topThree = projects.slice(0, 3);
-
   return (
     <div className="leaderboard-page">
-      <header className="leaderboard-header">
+      <div className="leaderboard-container">
+
         <button
-          className="lb-back-button"
+          className="leaderboard-back"
           onClick={() => navigate("/dashboard")}
         >
-          <ArrowLeft size={18} />
-          Dashboard
+          <ArrowLeft size={17} />
+          Back to Dashboard
         </button>
 
-        <div className="lb-heading">
-          <div className="lb-title-icon">
-            <Trophy size={26} />
-          </div>
-          <div>
-            <h1>Leaderboard</h1>
-            <p>Track project performance and rankings</p>
+        <div className="leaderboard-heading">
+          <div className="leaderboard-title-row">
+            <div className="leaderboard-title-icon">
+              <Medal size={24} />
+            </div>
+
+            <div>
+              <h1>Leaderboard</h1>
+              <p>
+                View project rankings and evaluation results.
+              </p>
+            </div>
           </div>
         </div>
-      </header>
 
-      <main className="lb-content">
-        <section className="lb-hero">
-          <div>
-            <span className="lb-eyebrow">HACKHUB RANKINGS</span>
-            <h2>Project Leaderboard</h2>
+        {error && (
+          <div
+            style={{
+              padding: "12px 16px",
+              marginBottom: "20px",
+              borderRadius: "8px",
+              background: "#fee2e2",
+              color: "#991b1b",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "flex",
+            gap: "12px",
+            marginBottom: "24px",
+            flexWrap: "wrap",
+          }}
+        >
+          <select
+            value={selectedHackathon}
+            onChange={(e) =>
+              setSelectedHackathon(e.target.value)
+            }
+            style={{
+              padding: "10px 14px",
+              borderRadius: "8px",
+              border: "1px solid #ddd",
+            }}
+          >
+            <option value="">
+              Select Hackathon
+            </option>
+
+            {hackathons.map((hackathon) => (
+              <option
+                key={hackathon.id}
+                value={hackathon.id}
+              >
+                {hackathon.name}
+              </option>
+            ))}
+          </select>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              border: "1px solid #ddd",
+              borderRadius: "8px",
+              padding: "0 12px",
+            }}
+          >
+            <Search size={17} />
+
+            <input
+              value={search}
+              onChange={(e) =>
+                setSearch(e.target.value)
+              }
+              placeholder="Search projects..."
+              style={{
+                border: "none",
+                outline: "none",
+                padding: "10px",
+              }}
+            />
+          </div>
+
+          <button
+            onClick={() =>
+              selectedHackathon &&
+              loadLeaderboard(selectedHackathon)
+            }
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "7px",
+              padding: "10px 14px",
+              borderRadius: "8px",
+              border: "1px solid #ddd",
+              background: "white",
+              cursor: "pointer",
+            }}
+          >
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="leaderboard-empty">
+            <Trophy size={40} />
+            <h2>Loading leaderboard...</h2>
+          </div>
+        ) : filteredProjects.length === 0 ? (
+          <div className="leaderboard-empty">
+            <Trophy size={40} />
+            <h2>No ranked projects yet</h2>
             <p>
-              Explore the top-performing projects based
-              on their evaluation scores.
+              Submitted projects will appear here after
+              evaluations are available.
             </p>
           </div>
-          <Trophy className="lb-hero-trophy" size={76} />
-        </section>
+        ) : (
+          <div className="leaderboard-list">
+            {filteredProjects.map((project, index) => {
+              const name =
+                project.project_name ||
+                project.name ||
+                "Untitled Project";
 
-        <section className="lb-podium">
-          {topThree.map((project, index) => (
-            <div
-              className={`lb-podium-card rank-${index + 1}`}
-              key={project.id}
-            >
-              <div className="lb-medal">
-                {index === 0 ? (
-                  <Trophy size={25} />
-                ) : (
-                  <Medal size={25} />
-                )}
-              </div>
+              const team =
+                project.team_name ||
+                project.team ||
+                "Unknown Team";
 
-              <span className="lb-rank">
-                Rank #{index + 1}
-              </span>
+              const average =
+                project.average_score ??
+                project.avg_score ??
+                0;
 
-              <h3>{project.name}</h3>
-              <p>{project.team}</p>
+              const judges =
+                project.judges_count ??
+                project.judge_count ??
+                0;
 
-              <div className="lb-podium-score">
-                {project.score}
-                <span>/100</span>
-              </div>
-            </div>
-          ))}
-        </section>
+              return (
+                <div
+                  className="leaderboard-row"
+                  key={project.project_id || project.id}
+                >
+                  <div className="leaderboard-rank">
+                    {index === 0 ? (
+                      <Trophy size={22} />
+                    ) : (
+                      `#${index + 1}`
+                    )}
+                  </div>
 
-        <section className="lb-table-section">
-          <div className="lb-table-heading">
-            <div>
-              <h2>All Projects</h2>
-              <p>Rankings based on evaluation scores</p>
-            </div>
+                  <div className="leaderboard-project">
+                    <h3>{name}</h3>
 
-            <div className="lb-search">
-              <Search size={17} />
-              <input
-                type="text"
-                placeholder="Search projects or teams"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
+                    <span>
+                      <Users size={14} />
+                      {team}
+                    </span>
+                  </div>
+
+                  <div className="leaderboard-judges">
+                    {judges} judge
+                    {judges !== 1 ? "s" : ""}
+                  </div>
+
+                  <div className="leaderboard-score">
+                    <strong>
+                      {Number(average).toFixed(2)}
+                    </strong>
+                    <span>/ 100</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
+        )}
 
-          <div className="lb-table-wrapper">
-            <table className="lb-table">
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Project</th>
-                  <th>Team</th>
-                  <th>Hackathon</th>
-                  <th>Score</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredProjects.map((project) => {
-                  const rank =
-                    projects.findIndex(
-                      (item) => item.id === project.id
-                    ) + 1;
-
-                  return (
-                    <tr key={project.id}>
-                      <td>
-                        <span
-                          className={`lb-rank-number ${
-                            rank <= 3 ? "top-rank" : ""
-                          }`}
-                        >
-                          {rank <= 3 ? (
-                            <Trophy size={16} />
-                          ) : (
-                            `#${rank}`
-                          )}
-                        </span>
-                      </td>
-                      <td>
-                        <strong>{project.name}</strong>
-                      </td>
-                      <td>{project.team}</td>
-                      <td>{project.hackathon}</td>
-                      <td>
-                        <span className="lb-score">
-                          {project.score}
-                          <small>/100</small>
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                {filteredProjects.length === 0 && (
-                  <tr>
-                    <td colSpan="5" className="lb-empty">
-                      {search
-                        ? "No matching projects found."
-                        : "No evaluated projects yet."}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </main>
+      </div>
     </div>
   );
 }

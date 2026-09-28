@@ -6,7 +6,8 @@ const {
     assignJudge,
     getMyAssignments,
     submitReview,
-    getMyReviews
+    getMyReviews,
+    getMyProgress
 } = require("../controllers/judgingController");
 
 const {
@@ -55,6 +56,14 @@ router.get(
     authenticate,
     authorize("judge"),
     getMyReviews
+);
+
+// Judge progress dashboard
+router.get(
+    "/my-progress",
+    authenticate,
+    authorize("judge"),
+    getMyProgress
 );
 
 module.exports = router;
