@@ -1,16 +1,10 @@
-# Dependencies
 node_modules/
-
-# Environment variables
 .env
 .env.*
-
-# Logs
 *.log
-
-# OS files
 .DS_Store
 Thumbs.db
-
-# VS Code
 .vscode/
+
+backend/data/*.db
+backend/*.csv
