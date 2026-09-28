@@ -29,7 +29,6 @@ function getProjects(req, res) {
     }
 }
 
-
 function getProjectById(req, res) {
     try {
         const { id } = req.params;
@@ -68,7 +67,6 @@ function getProjectById(req, res) {
     }
 }
 
-
 function createProject(req, res) {
     try {
         const {
@@ -82,10 +80,10 @@ function createProject(req, res) {
             demo_url
         } = req.body;
 
-        if (!hackathon_id || !name) {
+        if (!hackathon_id || !team_id || !name) {
             return res.status(400).json({
                 success: false,
-                message: "Hackathon ID and project name are required"
+                message: "Hackathon ID, team ID and project name are required"
             });
         }
 
@@ -100,6 +98,52 @@ function createProject(req, res) {
                 success: false,
                 message: "Hackathon not found"
             });
+        }
+
+        const team = db.prepare(`
+            SELECT *
+            FROM teams
+            WHERE id = ?
+              AND hackathon_id = ?
+        `).get(team_id, hackathon_id);
+
+        if (!team) {
+            return res.status(400).json({
+                success: false,
+                message: "Team does not belong to this hackathon"
+            });
+        }
+
+        if (req.user.role === "participant") {
+            const membership = db.prepare(`
+                SELECT id
+                FROM team_members
+                WHERE team_id = ?
+                  AND user_id = ?
+            `).get(team_id, req.user.id);
+
+            if (!membership) {
+                return res.status(403).json({
+                    success: false,
+                    message: "You must be a member of the team to create its project"
+                });
+            }
+        }
+
+        if (track_id) {
+            const track = db.prepare(`
+                SELECT id
+                FROM tracks
+                WHERE id = ?
+                  AND hackathon_id = ?
+            `).get(track_id, hackathon_id);
+
+            if (!track) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Track does not belong to this hackathon"
+                });
+            }
         }
 
         const result = db.prepare(`
@@ -117,8 +161,8 @@ function createProject(req, res) {
         `).run(
             hackathon_id,
             track_id || null,
-            team_id || null,
-            name,
+            team_id,
+            name.trim(),
             description || null,
             technologies || null,
             repository_url || null,
@@ -146,7 +190,6 @@ function createProject(req, res) {
     }
 }
 
-
 function submitProject(req, res) {
     try {
         const { id } = req.params;
@@ -162,6 +205,29 @@ function submitProject(req, res) {
                 success: false,
                 message: "Project not found"
             });
+        }
+
+        if (req.user.role === "participant") {
+            if (!project.team_id) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Project is not associated with a team"
+                });
+            }
+
+            const membership = db.prepare(`
+                SELECT id
+                FROM team_members
+                WHERE team_id = ?
+                  AND user_id = ?
+            `).get(project.team_id, req.user.id);
+
+            if (!membership) {
+                return res.status(403).json({
+                    success: false,
+                    message: "You are not a member of this project's team"
+                });
+            }
         }
 
         const hackathon = db.prepare(`
@@ -234,7 +300,6 @@ function submitProject(req, res) {
         });
     }
 }
-
 
 module.exports = {
     getProjects,
