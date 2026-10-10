@@ -1,10 +1,14 @@
+
 const API_BASE_URL = "http://localhost:5000/api";
 
 async function request(endpoint, options = {}) {
+  const token = localStorage.getItem("hackhub_token");
+
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -22,6 +26,10 @@ async function request(endpoint, options = {}) {
   }
 
   return data;
+}
+
+export async function apiRequest(endpoint, options = {}) {
+  return request(endpoint, options);
 }
 
 export async function login(email, password) {
@@ -57,9 +65,7 @@ export async function getProject(id) {
 export async function createProject(project, token) {
   return request("/projects", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: JSON.stringify(project),
   });
 }
@@ -67,9 +73,7 @@ export async function createProject(project, token) {
 export async function submitProject(id, token) {
   return request(`/projects/${id}/submit`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 }
 
@@ -79,34 +83,26 @@ export async function getLeaderboard(hackathonId) {
 
 export async function getCriteria(hackathonId, token) {
   return request(`/judging/criteria/${hackathonId}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 }
 
 export async function getMyAssignments(token) {
   return request("/judging/my-assignments", {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 }
 
 export async function submitReview(projectId, review, token) {
   return request(`/judging/review/${projectId}`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: JSON.stringify(review),
   });
 }
 
 export async function getMyReviews(token) {
   return request("/judging/my-reviews", {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 }

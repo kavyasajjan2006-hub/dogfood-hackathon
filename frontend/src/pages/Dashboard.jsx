@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -19,6 +20,9 @@ import "./Dashboard.css";
 function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
+
+  const user = JSON.parse(localStorage.getItem("hackhub_user") || "{}");
+  const isAdmin = user.role === "admin";
 
   const [projects, setProjects] = useState([]);
   const [search, setSearch] = useState("");
@@ -69,20 +73,18 @@ function Dashboard() {
 
   function navigateTo(path, name) {
     navigate(path, {
-      state: {
-        active: name,
-      },
+      state: { active: name },
     });
   }
+
+  const displayName =
+    user.name || user.username || user.email || "User";
 
   return (
     <div className="dashboard-page">
       <div className="dashboard-layout">
-
-        {/* ================= SIDEBAR ================= */}
-
+        {/* Sidebar */}
         <aside className="dashboard-sidebar">
-
           <div className="sidebar-logo">
             <h2>
               Hack<span>Hub</span>
@@ -90,7 +92,6 @@ function Dashboard() {
           </div>
 
           <nav className="sidebar-menu">
-
             <button
               className={activePage === "Overview" ? "active" : ""}
               onClick={() => navigateTo("/dashboard", "Overview")}
@@ -101,7 +102,7 @@ function Dashboard() {
 
             <button
               className={activePage === "Hackathons" ? "active" : ""}
-              onClick={() => navigateTo("/dashboard", "Hackathons")}
+              onClick={() => navigate("/hackathons")}
             >
               <Trophy />
               <span>Hackathons</span>
@@ -130,18 +131,13 @@ function Dashboard() {
               <Medal />
               <span>Leaderboard</span>
             </button>
-
           </nav>
         </aside>
 
-        {/* ================= MAIN ================= */}
-
+        {/* Main dashboard */}
         <main className="dashboard-main">
-
-          {/* TOP BAR */}
-
+          {/* Top bar */}
           <header className="dashboard-topbar">
-
             <div className="dashboard-search">
               <Search size={18} />
 
@@ -154,138 +150,117 @@ function Dashboard() {
             </div>
 
             <div className="dashboard-user">
-
               <div className="dashboard-user-info">
-                <strong>Admin User</strong>
-                <span>Organizer</span>
+                <strong>{displayName}</strong>
+                <span>{user.role || "Participant"}</span>
               </div>
 
               <div className="dashboard-avatar">
-                A
+                {displayName.charAt(0).toUpperCase()}
               </div>
-
             </div>
-
           </header>
 
-          {/* CONTENT */}
-
+          {/* Content */}
           <section className="dashboard-content">
-
             <div className="dashboard-breadcrumb">
               Workspace / {activePage}
             </div>
 
             <div className="dashboard-heading">
-
               <div>
-                <h1>
-                  {activePage === "Overview"
-                    ? "Overview"
-                    : activePage}
-                </h1>
-
-                <p>
-                  Here's what's happening in your workspace.
-                </p>
+                <h1>{activePage}</h1>
+                <p>Here's what's happening in your workspace.</p>
               </div>
 
-              <button
-                className="dashboard-primary-btn"
-                onClick={() => navigate("/submit-project")}
-              >
-                <Plus size={17} />
-                Submit Project
-              </button>
+              <div>
+                {isAdmin && (
+                  <button
+                    className="add-button"
+                    type="button"
+                    onClick={() => navigate("/hackathons")}
+                  >
+                    <Plus size={18} />
+                    Create Hackathon
+                  </button>
+                )}
 
+                <button
+                  className="dashboard-primary-btn"
+                  type="button"
+                  onClick={() => navigate("/submit-project")}
+                >
+                  <Plus size={17} />
+                  Submit Project
+                </button>
+              </div>
             </div>
 
-            {/* ================= STATS ================= */}
-
+            {/* Statistics */}
             <div className="dashboard-stats">
-
               <div className="dashboard-stat-card">
-
                 <div className="dashboard-stat-icon">
                   <FolderKanban size={22} />
                 </div>
-
                 <div>
                   <span>Total Projects</span>
                   <strong>{projects.length}</strong>
                 </div>
-
               </div>
 
               <div className="dashboard-stat-card">
-
                 <div className="dashboard-stat-icon">
                   <CheckCircle size={22} />
                 </div>
-
                 <div>
                   <span>Submitted</span>
                   <strong>{submittedProjects.length}</strong>
                 </div>
-
               </div>
 
               <div className="dashboard-stat-card">
-
                 <div className="dashboard-stat-icon">
                   <Trophy size={22} />
                 </div>
-
                 <div>
                   <span>Hackathons</span>
                   <strong>1</strong>
                 </div>
-
               </div>
 
               <div className="dashboard-stat-card">
-
                 <div className="dashboard-stat-icon">
                   <Users size={22} />
                 </div>
-
                 <div>
                   <span>Teams</span>
                   <strong>
-                    {new Set(
-                      projects
-                        .map((p) => p.team_name)
-                        .filter(Boolean)
-                    ).size}
+                    {
+                      new Set(
+                        projects
+                          .map((project) => project.team_name)
+                          .filter(Boolean)
+                      ).size
+                    }
                   </strong>
                 </div>
-
               </div>
-
             </div>
 
-            {/* ================= PROJECTS ================= */}
-
+            {/* Recent projects */}
             <div className="dashboard-section">
-
               <div className="dashboard-section-header">
-
                 <div>
                   <h2>Recent Projects</h2>
-
-                  <p>
-                    Projects submitted to your hackathons
-                  </p>
+                  <p>Projects submitted to your hackathons</p>
                 </div>
 
                 <button
-                  onClick={() =>
-                    navigateTo("/projects", "Projects")
-                  }
+                  type="button"
+                  onClick={() => navigate("/projects")}
                 >
                   View all
                 </button>
-
               </div>
 
               {loading ? (
@@ -293,139 +268,84 @@ function Dashboard() {
                   <p>Loading projects...</p>
                 </div>
               ) : filteredProjects.length === 0 ? (
-
                 <div className="dashboard-empty">
-
                   <FileText size={38} />
-
                   <h3>No projects found</h3>
-
-                  <p>
-                    Submit your first project to get started.
-                  </p>
-
+                  <p>Submit your first project to get started.</p>
                 </div>
-
               ) : (
-
                 <div className="dashboard-project-list">
+                  {filteredProjects.slice(0, 5).map((project, index) => {
+                    const projectName =
+                      project.name ||
+                      project.project_name ||
+                      "Untitled Project";
 
-                  {filteredProjects
-                    .slice(0, 5)
-                    .map((project) => {
+                    const teamName = project.team_name || "No team";
 
-                      const projectName =
-                        project.name ||
-                        project.project_name ||
-                        "Untitled Project";
+                    const status =
+                      project.status ||
+                      (project.submitted ? "submitted" : "draft");
 
-                      const teamName =
-                        project.team_name ||
-                        "No team";
-
-                      const status =
-                        project.status ||
-                        (project.submitted
-                          ? "submitted"
-                          : "draft");
-
-                      return (
-                        <div
-                          className="dashboard-project-item"
-                          key={project.id}
-                        >
-
-                          <div className="dashboard-project-left">
-
-                            <div className="dashboard-project-icon">
-                              <FolderKanban size={20} />
-                            </div>
-
-                            <div className="dashboard-project-info">
-
-                              <h3>
-                                {projectName}
-                              </h3>
-
-                              <p>
-                                Team: {teamName}
-                              </p>
-
-                            </div>
-
+                    return (
+                      <div
+                        className="dashboard-project-item"
+                        key={project.id ?? index}
+                      >
+                        <div className="dashboard-project-left">
+                          <div className="dashboard-project-icon">
+                            <FolderKanban size={20} />
                           </div>
 
-                          <div className="dashboard-project-right">
+                          <div className="dashboard-project-info">
+                            <h3>{projectName}</h3>
+                            <p>Team: {teamName}</p>
+                          </div>
+                        </div>
 
-                            <Clock size={15} />
+                        <div className="dashboard-project-right">
+                          <Clock size={15} />
 
-                            <span
-                              className={`dashboard-status ${
-                                status === "submitted"
-                                  ? "submitted"
-                                  : status === "pending"
+                          <span
+                            className={`dashboard-status ${
+                              status === "submitted"
+                                ? "submitted"
+                                : status === "pending"
                                   ? "pending"
                                   : "draft"
-                              }`}
-                            >
-                              {status}
-                            </span>
-
-                          </div>
-
+                            }`}
+                          >
+                            {status}
+                          </span>
                         </div>
-                      );
-                    })}
-
+                      </div>
+                    );
+                  })}
                 </div>
-
               )}
-
             </div>
 
-            {/* ================= HACKATHON ================= */}
-
+            {/* Active hackathons */}
             <div className="dashboard-section">
-
               <div className="dashboard-section-header">
-
                 <div>
                   <h2>Active Hackathons</h2>
-
-                  <p>
-                    Hackathons currently available
-                  </p>
+                  <p>Hackathons currently available</p>
                 </div>
-
               </div>
 
               <div className="dashboard-hackathons">
-
                 <div className="dashboard-hackathon-card">
-
-                  <h3>
-                    Dogfood Hackathon 2026
-                  </h3>
-
-                  <p>
-                    Open Innovation
-                  </p>
-
+                  <h3>Dogfood Hackathon 2026</h3>
+                  <p>Open Innovation</p>
                   <p style={{ marginTop: "8px" }}>
-                    Submission deadline: September 30,
-                    2026
+                    Submission deadline: September 30, 2026
                   </p>
-
                 </div>
-
               </div>
-
             </div>
-
           </section>
-
         </main>
-
       </div>
     </div>
   );

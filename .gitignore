@@ -8,3 +8,5 @@ Thumbs.db
 
 backend/data/*.db
 backend/*.csv
+# Local SQLite database
+backend/data/dogfood.db

@@ -1,41 +1,21 @@
 
-import { FolderKanban, ArrowUpRight } from "lucide-react";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 
-function ProjectCard({ project, onView }) {
-  return (
-    <div className="project-card">
-      <div className="project-card-top">
-        <div className="project-icon">
-          <FolderKanban size={20} />
-        </div>
+function ProtectedRoute() {
+  const location = useLocation();
+  const token = localStorage.getItem("hackhub_token");
 
-        <span
-          className={`project-status ${project.status
-            ?.toLowerCase()
-            .replace(/\s+/g, "-")}`}
-        >
-          {project.status}
-        </span>
-      </div>
+  if (!token) {
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: location }}
+      />
+    );
+  }
 
-      <h3>{project.name}</h3>
-      <p className="project-description">
-        {project.description}
-      </p>
-
-      <div className="project-team">
-        <span>Team</span>
-        <strong>{project.team}</strong>
-      </div>
-
-      <button
-        className="project-view"
-        onClick={() => onView?.(project)}
-      >
-        View project <ArrowUpRight size={16} />
-      </button>
-    </div>
-  );
+  return <Outlet />;
 }
 
-export default ProjectCard;
+export default ProtectedRoute;

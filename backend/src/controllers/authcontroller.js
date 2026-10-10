@@ -1,3 +1,4 @@
+
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const db = require("../config/database");
@@ -7,7 +8,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "dogfood-development-secret";
 // REGISTER
 function register(req, res) {
     try {
-        const { name, email, password, role } = req.body;
+        const { name, email, password } = req.body;
 
         if (!name || !email || !password) {
             return res.status(400).json({
@@ -23,9 +24,11 @@ function register(req, res) {
             });
         }
 
+        const normalizedEmail = email.toLowerCase().trim();
+
         const existingUser = db
             .prepare("SELECT id FROM users WHERE email = ?")
-            .get(email.toLowerCase().trim());
+            .get(normalizedEmail);
 
         if (existingUser) {
             return res.status(409).json({
@@ -34,10 +37,8 @@ function register(req, res) {
             });
         }
 
-        // Only allow participant during public registration.
-        // Judge/admin accounts should be created by an admin later.
-        const userRole = role === "participant" ? "participant" : "participant";
-
+        // Public registration only creates participant accounts.
+        const userRole = "participant";
         const hashedPassword = bcrypt.hashSync(password, 10);
 
         const result = db
@@ -47,7 +48,7 @@ function register(req, res) {
             `)
             .run(
                 name.trim(),
-                email.toLowerCase().trim(),
+                normalizedEmail,
                 hashedPassword,
                 userRole
             );
@@ -55,7 +56,7 @@ function register(req, res) {
         const user = {
             id: result.lastInsertRowid,
             name: name.trim(),
-            email: email.toLowerCase().trim(),
+            email: normalizedEmail,
             role: userRole
         };
 
@@ -69,7 +70,6 @@ function register(req, res) {
             user,
             token
         });
-
     } catch (error) {
         console.error("Registration error:", error);
 
@@ -137,7 +137,6 @@ function login(req, res) {
             user: safeUser,
             token
         });
-
     } catch (error) {
         console.error("Login error:", error);
 
@@ -149,7 +148,86 @@ function login(req, res) {
 }
 
 
+// CHANGE PASSWORD
+function changePassword(req, res) {
+    try {
+        // Requires authentication middleware to set req.user.
+        const userId = req.user && req.user.id;
+        const { currentPassword, newPassword } = req.body;
+
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Authentication required"
+            });
+        }
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({
+                success: false,
+                message: "Both passwords are required"
+            });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: "New password must be at least 6 characters"
+            });
+        }
+
+        if (currentPassword === newPassword) {
+            return res.status(400).json({
+                success: false,
+                message: "New password must be different from the current password"
+            });
+        }
+
+        const user = db
+            .prepare("SELECT id, password FROM users WHERE id = ?")
+            .get(userId);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        const passwordMatches = bcrypt.compareSync(
+            currentPassword,
+            user.password
+        );
+
+        if (!passwordMatches) {
+            return res.status(401).json({
+                success: false,
+                message: "Current password is incorrect"
+            });
+        }
+
+        const hashedPassword = bcrypt.hashSync(newPassword, 10);
+
+        db.prepare("UPDATE users SET password = ? WHERE id = ?")
+            .run(hashedPassword, userId);
+
+        return res.json({
+            success: true,
+            message: "Password changed successfully"
+        });
+    } catch (error) {
+        console.error("Change password error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Server error while changing password"
+        });
+    }
+}
+
+
 module.exports = {
     register,
-    login
+    login,
+    changePassword
 };
