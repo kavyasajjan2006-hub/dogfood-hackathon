@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   FolderKanban,
@@ -10,345 +10,492 @@ import {
   Plus,
   Clock,
   CheckCircle,
-  FileText,
   Users,
+  LogOut,
+  LayoutDashboard,
+  CalendarDays,
+  UserRound,
+  Settings,
+  ChevronDown,
+  X,
 } from "lucide-react";
-
 import { getProjects } from "../utils/api";
 import "./Dashboard.css";
 
-function Dashboard() {
+export default function Dashboard() {
   const navigate = useNavigate();
-  const location = useLocation();
-
-  const user = JSON.parse(localStorage.getItem("hackhub_user") || "{}");
-  const isAdmin = user.role === "admin";
 
   const [projects, setProjects] = useState([]);
-  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
-  const activePage = location.state?.active || "Overview";
+  const [user, setUser] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("hackhub_user")) || {};
+    } catch {
+      return {};
+    }
+  });
 
   useEffect(() => {
-    loadProjects();
+    function syncUser() {
+      try {
+        setUser(JSON.parse(localStorage.getItem("hackhub_user")) || {});
+      } catch {
+        setUser({});
+      }
+    }
+
+    window.addEventListener("storage", syncUser);
+    return () => window.removeEventListener("storage", syncUser);
   }, []);
 
-  async function loadProjects() {
-    try {
-      setLoading(true);
+  useEffect(() => {
+    let cancelled = false;
 
-      const data = await getProjects();
+    async function loadProjects() {
+      try {
+        setLoading(true);
+        setError("");
 
-      const list = Array.isArray(data)
-        ? data
-        : data?.projects || data?.data || [];
+        const response = await getProjects();
 
-      setProjects(list);
-    } catch (error) {
-      console.error("Failed to load projects:", error);
-      setProjects([]);
-    } finally {
-      setLoading(false);
+        if (cancelled) return;
+
+        const data = Array.isArray(response)
+          ? response
+          : response?.projects || response?.data || [];
+
+        setProjects(Array.isArray(data) ? data : []);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Could not load projects.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
+
+    loadProjects();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function handleLogout() {
+    localStorage.removeItem("hackhub_token");
+    localStorage.removeItem("hackhub_user");
+    setProfileOpen(false);
+    navigate("/login", { replace: true });
   }
 
+  function openPage(path) {
+    setProfileOpen(false);
+    navigate(path);
+  }
+
+  const displayName =
+    user?.name ||
+    user?.username ||
+    user?.email?.split("@")[0] ||
+    "User";
+
+  const displayEmail = user?.email || "Account";
+  const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+
   const filteredProjects = projects.filter((project) => {
-    const text = `
-      ${project.name || ""}
-      ${project.project_name || ""}
-      ${project.team_name || ""}
-      ${project.description || ""}
-    `.toLowerCase();
+    const text = [
+      project.title,
+      project.name,
+      project.description,
+      project.hackathon_name,
+      project.status,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
 
     return text.includes(search.toLowerCase());
   });
 
-  const submittedProjects = projects.filter(
-    (project) =>
-      project.status === "submitted" ||
-      project.submitted === 1 ||
-      project.submitted === true
-  );
-
-  function navigateTo(path, name) {
-    navigate(path, {
-      state: { active: name },
-    });
-  }
-
-  const displayName =
-    user.name || user.username || user.email || "User";
+  const stats = [
+    {
+      label: "Total Projects",
+      value: projects.length,
+      icon: FolderKanban,
+    },
+    {
+      label: "Hackathons",
+      value: new Set(
+        projects.map((project) => project.hackathon_id).filter(Boolean)
+      ).size,
+      icon: Trophy,
+    },
+    {
+      label: "Evaluations",
+      value: projects.filter(
+        (project) => project.status === "evaluated"
+      ).length,
+      icon: ClipboardCheck,
+    },
+    {
+      label: "Completed",
+      value: projects.filter(
+        (project) => project.status === "completed"
+      ).length,
+      icon: CheckCircle,
+    },
+  ];
 
   return (
-    <div className="dashboard-page">
-      <div className="dashboard-layout">
-        {/* Sidebar */}
-        <aside className="dashboard-sidebar">
-          <div className="sidebar-logo">
-            <h2>
-              Hack<span>Hub</span>
-            </h2>
+    <div className="dashboard-layout">
+      <aside className="dashboard-sidebar">
+        <div className="dashboard-brand">
+          <div className="brand-icon">
+            <Trophy size={23} />
+          </div>
+          <span>HackHub</span>
+        </div>
+
+        <div className="sidebar-section-label">WORKSPACE</div>
+
+        <nav className="sidebar-navigation">
+          <button
+            className="sidebar-link active"
+            onClick={() => openPage("/dashboard")}
+          >
+            <LayoutDashboard size={19} />
+            <span>Overview</span>
+          </button>
+
+          <button
+            className="sidebar-link"
+            onClick={() => openPage("/hackathons")}
+          >
+            <CalendarDays size={19} />
+            <span>Hackathons</span>
+          </button>
+
+          <button
+            className="sidebar-link"
+            onClick={() => openPage("/projects")}
+          >
+            <FolderKanban size={19} />
+            <span>Projects</span>
+          </button>
+
+          <button
+            className="sidebar-link"
+            onClick={() => openPage("/judging")}
+          >
+            <ClipboardCheck size={19} />
+            <span>Judging</span>
+          </button>
+
+          <button
+            className="sidebar-link"
+            onClick={() => openPage("/leaderboard")}
+          >
+            <Medal size={19} />
+            <span>Leaderboard</span>
+          </button>
+        </nav>
+
+        <div className="sidebar-bottom">
+          <div className="sidebar-user">
+            <div className="user-avatar">
+              <UserRound size={20} />
+            </div>
+
+            <div className="sidebar-user-details">
+              <strong>{displayName}</strong>
+              <span>{user?.role || "Participant"}</span>
+            </div>
           </div>
 
-          <nav className="sidebar-menu">
-            <button
-              className={activePage === "Overview" ? "active" : ""}
-              onClick={() => navigateTo("/dashboard", "Overview")}
-            >
-              <FolderKanban />
-              <span>Overview</span>
-            </button>
+          <button
+            type="button"
+            className="sidebar-logout"
+            onClick={handleLogout}
+          >
+            <LogOut size={19} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
 
-            <button
-              className={activePage === "Hackathons" ? "active" : ""}
-              onClick={() => navigate("/hackathons")}
-            >
-              <Trophy />
-              <span>Hackathons</span>
-            </button>
+      <main className="dashboard-main">
+        <header className="dashboard-header">
+          <div className="header-heading">
+            <h1>Dashboard</h1>
+            <p>Welcome back, {displayName}!</p>
+          </div>
 
-            <button
-              className={activePage === "Projects" ? "active" : ""}
-              onClick={() => navigateTo("/projects", "Projects")}
-            >
-              <FolderKanban />
-              <span>Projects</span>
-            </button>
+          <div className="header-actions">
+            {isAdmin && (
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => navigate("/create-hackathon")}
+              >
+                <Plus size={18} />
+                Create Hackathon
+              </button>
+            )}
 
-            <button
-              className={activePage === "Judging" ? "active" : ""}
-              onClick={() => navigateTo("/judging", "Judging")}
-            >
-              <ClipboardCheck />
-              <span>Judging</span>
-            </button>
-
-            <button
-              className={activePage === "Leaderboard" ? "active" : ""}
-              onClick={() => navigateTo("/leaderboard", "Leaderboard")}
-            >
-              <Medal />
-              <span>Leaderboard</span>
-            </button>
-          </nav>
-        </aside>
-
-        {/* Main dashboard */}
-        <main className="dashboard-main">
-          {/* Top bar */}
-          <header className="dashboard-topbar">
-            <div className="dashboard-search">
+            <label className="dashboard-search">
               <Search size={18} />
-
               <input
-                type="text"
+                type="search"
                 placeholder="Search projects..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(event) => setSearch(event.target.value)}
               />
-            </div>
 
-            <div className="dashboard-user">
-              <div className="dashboard-user-info">
-                <strong>{displayName}</strong>
-                <span>{user.role || "Participant"}</span>
-              </div>
+              {search && (
+                <button
+                  type="button"
+                  className="clear-search"
+                  onClick={() => setSearch("")}
+                  aria-label="Clear search"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </label>
 
-              <div className="dashboard-avatar">
-                {displayName.charAt(0).toUpperCase()}
-              </div>
-            </div>
-          </header>
+            <div className="profile-menu-wrapper">
+              <button
+                type="button"
+                className="profile-trigger"
+                onClick={() => setProfileOpen((open) => !open)}
+                aria-expanded={profileOpen}
+                aria-label="Open profile menu"
+              >
+                <div className="user-avatar header-avatar">
+                  <UserRound size={20} />
+                </div>
 
-          {/* Content */}
-          <section className="dashboard-content">
-            <div className="dashboard-breadcrumb">
-              Workspace / {activePage}
-            </div>
+                <div className="profile-trigger-text">
+                  <strong>{displayName}</strong>
+                  <span>{user?.role || "Participant"}</span>
+                </div>
 
-            <div className="dashboard-heading">
-              <div>
-                <h1>{activePage}</h1>
-                <p>Here's what's happening in your workspace.</p>
-              </div>
+                <ChevronDown size={17} />
+              </button>
 
-              <div>
-                {isAdmin && (
+              {profileOpen && (
+                <>
                   <button
-                    className="add-button"
                     type="button"
-                    onClick={() => navigate("/hackathons")}
-                  >
-                    <Plus size={18} />
-                    Create Hackathon
-                  </button>
-                )}
+                    className="profile-menu-backdrop"
+                    aria-label="Close profile menu"
+                    onClick={() => setProfileOpen(false)}
+                  />
 
-                <button
-                  className="dashboard-primary-btn"
-                  type="button"
-                  onClick={() => navigate("/submit-project")}
-                >
-                  <Plus size={17} />
-                  Submit Project
-                </button>
-              </div>
-            </div>
+                  <div className="profile-dropdown">
+                    <div className="profile-dropdown-heading">
+                      <strong>{displayName}</strong>
+                      <span>{displayEmail}</span>
+                    </div>
 
-            {/* Statistics */}
-            <div className="dashboard-stats">
-              <div className="dashboard-stat-card">
-                <div className="dashboard-stat-icon">
-                  <FolderKanban size={22} />
-                </div>
-                <div>
-                  <span>Total Projects</span>
-                  <strong>{projects.length}</strong>
-                </div>
-              </div>
+                    <button
+                      type="button"
+                      className="profile-dropdown-item"
+                      onClick={() => openPage("/profile")}
+                    >
+                      <UserRound size={18} />
+                      <span>My Profile</span>
+                    </button>
 
-              <div className="dashboard-stat-card">
-                <div className="dashboard-stat-icon">
-                  <CheckCircle size={22} />
-                </div>
-                <div>
-                  <span>Submitted</span>
-                  <strong>{submittedProjects.length}</strong>
-                </div>
-              </div>
+                    <button
+                      type="button"
+                      className="profile-dropdown-item"
+                      onClick={() => openPage("/settings")}
+                    >
+                      <Settings size={18} />
+                      <span>Settings</span>
+                    </button>
 
-              <div className="dashboard-stat-card">
-                <div className="dashboard-stat-icon">
-                  <Trophy size={22} />
-                </div>
-                <div>
-                  <span>Hackathons</span>
-                  <strong>1</strong>
-                </div>
-              </div>
+                    <div className="profile-dropdown-divider" />
 
-              <div className="dashboard-stat-card">
-                <div className="dashboard-stat-icon">
-                  <Users size={22} />
-                </div>
-                <div>
-                  <span>Teams</span>
-                  <strong>
-                    {
-                      new Set(
-                        projects
-                          .map((project) => project.team_name)
-                          .filter(Boolean)
-                      ).size
-                    }
-                  </strong>
-                </div>
-              </div>
-            </div>
-
-            {/* Recent projects */}
-            <div className="dashboard-section">
-              <div className="dashboard-section-header">
-                <div>
-                  <h2>Recent Projects</h2>
-                  <p>Projects submitted to your hackathons</p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => navigate("/projects")}
-                >
-                  View all
-                </button>
-              </div>
-
-              {loading ? (
-                <div className="dashboard-empty">
-                  <p>Loading projects...</p>
-                </div>
-              ) : filteredProjects.length === 0 ? (
-                <div className="dashboard-empty">
-                  <FileText size={38} />
-                  <h3>No projects found</h3>
-                  <p>Submit your first project to get started.</p>
-                </div>
-              ) : (
-                <div className="dashboard-project-list">
-                  {filteredProjects.slice(0, 5).map((project, index) => {
-                    const projectName =
-                      project.name ||
-                      project.project_name ||
-                      "Untitled Project";
-
-                    const teamName = project.team_name || "No team";
-
-                    const status =
-                      project.status ||
-                      (project.submitted ? "submitted" : "draft");
-
-                    return (
-                      <div
-                        className="dashboard-project-item"
-                        key={project.id ?? index}
-                      >
-                        <div className="dashboard-project-left">
-                          <div className="dashboard-project-icon">
-                            <FolderKanban size={20} />
-                          </div>
-
-                          <div className="dashboard-project-info">
-                            <h3>{projectName}</h3>
-                            <p>Team: {teamName}</p>
-                          </div>
-                        </div>
-
-                        <div className="dashboard-project-right">
-                          <Clock size={15} />
-
-                          <span
-                            className={`dashboard-status ${
-                              status === "submitted"
-                                ? "submitted"
-                                : status === "pending"
-                                  ? "pending"
-                                  : "draft"
-                            }`}
-                          >
-                            {status}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                    <button
+                      type="button"
+                      className="profile-dropdown-item logout-menu-item"
+                      onClick={handleLogout}
+                    >
+                      <LogOut size={18} />
+                      <span>Logout</span>
+                    </button>
+                  </div>
+                </>
               )}
             </div>
+          </div>
+        </header>
 
-            {/* Active hackathons */}
-            <div className="dashboard-section">
-              <div className="dashboard-section-header">
-                <div>
-                  <h2>Active Hackathons</h2>
-                  <p>Hackathons currently available</p>
-                </div>
-              </div>
+        <section className="dashboard-content">
+          <div className="dashboard-welcome-card">
+            <div>
+              <span className="welcome-eyebrow">YOUR WORKSPACE</span>
+              <h2>Build something amazing.</h2>
+              <p>
+                Manage your hackathon projects, track submissions, and
+                follow your progress from one place.
+              </p>
 
-              <div className="dashboard-hackathons">
-                <div className="dashboard-hackathon-card">
-                  <h3>Dogfood Hackathon 2026</h3>
-                  <p>Open Innovation</p>
-                  <p style={{ marginTop: "8px" }}>
-                    Submission deadline: September 30, 2026
-                  </p>
-                </div>
-              </div>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => navigate("/submit-project")}
+              >
+                <Plus size={19} />
+                Submit a Project
+              </button>
             </div>
+
+            <div className="welcome-illustration">
+              <Trophy size={78} strokeWidth={1.3} />
+            </div>
+          </div>
+
+          <div className="dashboard-section-heading">
+            <div>
+              <h2>Overview</h2>
+              <p>Here is a summary of your workspace.</p>
+            </div>
+          </div>
+
+          <div className="dashboard-stats-grid">
+            {stats.map((stat) => {
+              const Icon = stat.icon;
+
+              return (
+                <article className="dashboard-stat-card" key={stat.label}>
+                  <div className="stat-card-top">
+                    <span>{stat.label}</span>
+                    <div className="stat-icon">
+                      <Icon size={21} />
+                    </div>
+                  </div>
+
+                  <strong className="stat-value">{stat.value}</strong>
+                </article>
+              );
+            })}
+          </div>
+
+          <section className="projects-section">
+            <div className="dashboard-section-heading">
+              <div>
+                <h2>Recent Projects</h2>
+                <p>Your latest project submissions.</p>
+              </div>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => navigate("/projects")}
+              >
+                View all
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="dashboard-message">
+                <Clock size={20} />
+                Loading projects...
+              </div>
+            ) : error ? (
+              <div className="dashboard-message error-message">
+                {error}
+              </div>
+            ) : filteredProjects.length === 0 ? (
+              <div className="empty-projects-card">
+                <div className="empty-projects-icon">
+                  <FolderKanban size={30} />
+                </div>
+
+                <h3>
+                  {search ? "No matching projects" : "No projects yet"}
+                </h3>
+
+                <p>
+                  {search
+                    ? "Try another search term."
+                    : "Submit your first project to see it listed here."}
+                </p>
+
+                {!search && (
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => navigate("/submit-project")}
+                  >
+                    <Plus size={18} />
+                    Create Project
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="projects-list">
+                {filteredProjects.slice(0, 5).map((project, index) => (
+                  <article
+                    className="project-row"
+                    key={project.id || project.project_id || index}
+                  >
+                    <div className="project-row-icon">
+                      <FolderKanban size={22} />
+                    </div>
+
+                    <div className="project-row-details">
+                      <strong>
+                        {project.title || project.name || "Untitled Project"}
+                      </strong>
+                      <span>
+                        {project.hackathon_name ||
+                          project.hackathon_title ||
+                          "Hackathon project"}
+                      </span>
+                    </div>
+
+                    <span
+                      className={`project-status ${
+                        String(project.status || "submitted").toLowerCase()
+                      }`}
+                    >
+                      {project.status || "Submitted"}
+                    </span>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
-        </main>
-      </div>
+
+          <section className="dashboard-bottom-card">
+            <div className="bottom-card-icon">
+              <Users size={23} />
+            </div>
+            <div>
+              <h3>Keep building with HackHub</h3>
+              <p>
+                Explore hackathons, submit your ideas, and follow project
+                evaluations.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => navigate("/hackathons")}
+            >
+              Explore Hackathons
+            </button>
+          </section>
+        </section>
+      </main>
     </div>
   );
 }
-
-export default Dashboard;

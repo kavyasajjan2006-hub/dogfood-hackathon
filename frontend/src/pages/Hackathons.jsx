@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import {
   CalendarDays,
   ArrowUpRight,
+  Plus,
+  X,
 } from "lucide-react";
 import { apiRequest } from "../utils/api";
 
@@ -40,10 +42,16 @@ function Hackathons() {
   async function loadHackathons() {
     try {
       setError("");
+
       const data = await apiRequest("/hackathons");
-      setHackathons(data.hackathons || []);
+
+      const list = Array.isArray(data)
+        ? data
+        : data?.hackathons || data?.data || [];
+
+      setHackathons(list);
     } catch (err) {
-      setError(err.message || "Unable to load hackathons");
+      setError(err.message || "Unable to load hackathons.");
     } finally {
       setLoading(false);
     }
@@ -66,6 +74,30 @@ function Hackathons() {
     event.preventDefault();
     setError("");
     setMessage("");
+
+    if (!isAdmin) {
+      setError("Only administrators can create hackathons.");
+      return;
+    }
+
+    if (
+      form.start_date &&
+      form.end_date &&
+      form.end_date < form.start_date
+    ) {
+      setError("The end date cannot be before the start date.");
+      return;
+    }
+
+    if (
+      form.submission_deadline &&
+      form.start_date &&
+      form.submission_deadline < form.start_date
+    ) {
+      setError("The submission deadline cannot be before the start date.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -75,6 +107,7 @@ function Hackathons() {
       });
 
       setMessage("Hackathon created successfully!");
+
       setForm({
         name: "",
         description: "",
@@ -82,11 +115,12 @@ function Hackathons() {
         end_date: "",
         submission_deadline: "",
       });
+
       setShowForm(false);
 
       await loadHackathons();
     } catch (err) {
-      setError(err.message || "Failed to create hackathon");
+      setError(err.message || "Failed to create hackathon.");
     } finally {
       setSubmitting(false);
     }
@@ -97,22 +131,31 @@ function Hackathons() {
       <div className="page-heading">
         <div>
           <h1>Hackathons</h1>
-<p>Create and manage hackathon events, track submissions, and inspire innovation.</p>
+          <p>
+            Discover hackathons, explore projects, and inspire innovation.
+          </p>
         </div>
 
         {isAdmin && (
-  <button
-    type="button"
-    onClick={() => {
-      alert("Create Hackathon button is working!");
-      setShowForm(true);
-      setError("");
-      setMessage("");
-    }}
-  >
-    + Create Hackathon
-  </button>
-)}
+          <button
+            type="button"
+            onClick={() => {
+              setShowForm((previous) => !previous);
+              setError("");
+              setMessage("");
+            }}
+          >
+            {showForm ? (
+              <>
+                <X size={17} /> Cancel
+              </>
+            ) : (
+              <>
+                <Plus size={17} /> Create Hackathon
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {message && <p role="status">{message}</p>}
@@ -122,46 +165,48 @@ function Hackathons() {
         <form onSubmit={handleSubmit}>
           <h2>Create a Hackathon</h2>
 
-          <label htmlFor="name">Hackathon name *</label>
+          <label htmlFor="hackathon-name">Hackathon name *</label>
           <input
-            id="name"
+            id="hackathon-name"
             name="name"
             value={form.name}
             onChange={handleChange}
             required
+            maxLength={150}
           />
 
-          <label htmlFor="description">Description</label>
+          <label htmlFor="hackathon-description">Description</label>
           <textarea
-            id="description"
+            id="hackathon-description"
             name="description"
             value={form.description}
             onChange={handleChange}
+            rows={4}
           />
 
-          <label htmlFor="start_date">Start date</label>
+          <label htmlFor="hackathon-start">Start date</label>
           <input
-            id="start_date"
+            id="hackathon-start"
             name="start_date"
             type="date"
             value={form.start_date}
             onChange={handleChange}
           />
 
-          <label htmlFor="end_date">End date</label>
+          <label htmlFor="hackathon-end">End date</label>
           <input
-            id="end_date"
+            id="hackathon-end"
             name="end_date"
             type="date"
             value={form.end_date}
             onChange={handleChange}
           />
 
-          <label htmlFor="submission_deadline">
+          <label htmlFor="hackathon-deadline">
             Submission deadline
           </label>
           <input
-            id="submission_deadline"
+            id="hackathon-deadline"
             name="submission_deadline"
             type="date"
             value={form.submission_deadline}
@@ -177,10 +222,10 @@ function Hackathons() {
       {loading && <p>Loading hackathons...</p>}
 
       {!loading && !error && hackathons.length === 0 && (
-        <p>No hackathons found. Create one to get started.</p>
+        <p>No hackathons found yet.</p>
       )}
 
-      {!loading && (
+      {!loading && hackathons.length > 0 && (
         <div className="hackathon-grid">
           {hackathons.map((hackathon) => (
             <div className="hackathon-card" key={hackathon.id}>
@@ -206,8 +251,15 @@ function Hackathons() {
                 </span>
               </div>
 
+              {hackathon.submission_deadline && (
+                <p>
+                  Submission deadline: {hackathon.submission_deadline}
+                </p>
+              )}
+
               <button
                 className="project-view"
+                type="button"
                 onClick={() =>
                   navigate(
                     `/leaderboard?hackathon_id=${encodeURIComponent(

@@ -1,5 +1,4 @@
 
-
 import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
@@ -19,7 +18,11 @@ function Landing() {
     <div className="landing">
       {/* Navbar */}
       <nav className="landing-nav">
-        <div className="landing-logo">
+        <div
+          className="landing-logo"
+          onClick={() => navigate("/")}
+          style={{ cursor: "pointer" }}
+        >
           <div className="logo-icon">
             <Code2 size={23} />
           </div>
@@ -34,14 +37,17 @@ function Landing() {
 
         <div className="landing-nav-actions">
           <button
+            type="button"
             className="login-btn"
-            onClick={() => navigate("/dashboard")}
+            onClick={() => navigate("/login")}
           >
             Login
           </button>
+
           <button
+            type="button"
             className="get-started-btn"
-            onClick={() => navigate("/dashboard")}
+            onClick={() => navigate("/register")}
           >
             Get Started <ArrowRight size={16} />
           </button>
@@ -70,16 +76,18 @@ function Landing() {
 
           <div className="hero-actions">
             <button
+              type="button"
               className="primary-hero-btn"
-              onClick={() => navigate("/dashboard")}
+              onClick={() => navigate("/login")}
             >
               Explore Hackathons
               <ArrowRight size={18} />
             </button>
 
             <button
+              type="button"
               className="secondary-hero-btn"
-              onClick={() => navigate("/dashboard")}
+              onClick={() => navigate("/login")}
             >
               View Dashboard
             </button>
@@ -102,6 +110,7 @@ function Landing() {
                 <span className="visual-label">HACKHUB</span>
                 <h3>Innovation starts here</h3>
               </div>
+
               <div className="visual-icon">
                 <Lightbulb size={24} />
               </div>
@@ -223,8 +232,9 @@ function Landing() {
         </div>
 
         <button
+          type="button"
           className="primary-hero-btn"
-          onClick={() => navigate("/dashboard")}
+          onClick={() => navigate("/register")}
         >
           Get Started <ArrowRight size={18} />
         </button>
@@ -232,12 +242,17 @@ function Landing() {
 
       {/* Footer */}
       <footer className="landing-footer">
-        <div className="landing-logo">
+        <div
+          className="landing-logo"
+          onClick={() => navigate("/")}
+          style={{ cursor: "pointer" }}
+        >
           <div className="logo-icon">
             <Code2 size={21} />
           </div>
           <span>HackHub</span>
         </div>
+
         <span>Build ideas. Create impact.</span>
         <span>© 2026 HackHub</span>
       </footer>

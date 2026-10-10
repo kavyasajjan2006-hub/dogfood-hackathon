@@ -11,6 +11,8 @@ import Projects from "./pages/Projects.jsx";
 import Judging from "./pages/Judging.jsx";
 import Leaderboard from "./pages/Leaderboard.jsx";
 import ChangePassword from "./pages/ChangePassword.jsx";
+import CreateHackathon from "./pages/CreateHackathon.jsx";
+
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import "./App.css";
 
@@ -23,15 +25,31 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
-        {/* Authentication required */}
+        {/* All authenticated users */}
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/hackathons" element={<Hackathons />} />
-          <Route path="/submit-project" element={<SubmitProject />} />
-          <Route path="/projects" element={<Projects />} />
-          <Route path="/judging" element={<Judging />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/change-password" element={<ChangePassword />} />
+        </Route>
+
+        {/* Admin only */}
+        <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
+          <Route
+            path="/create-hackathon"
+            element={<CreateHackathon />}
+          />
+        </Route>
+
+        {/* Judge only */}
+        <Route element={<ProtectedRoute allowedRoles={["judge"]} />}>
+          <Route path="/judging" element={<Judging />} />
+        </Route>
+
+        {/* Participant only */}
+        <Route element={<ProtectedRoute allowedRoles={["participant"]} />}>
+          <Route path="/submit-project" element={<SubmitProject />} />
+          <Route path="/projects" element={<Projects />} />
         </Route>
 
         {/* Redirect unknown URLs */}

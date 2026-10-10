@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -45,7 +46,12 @@ const criteriaFallback = [
 function normalizeProject(project) {
   return {
     ...project,
-    name: project.name || project.project_name || "Untitled Project",
+    id: project.id ?? project.project_id,
+    name:
+      project.name ||
+      project.project_name ||
+      project.title ||
+      "Untitled Project",
     team:
       project.team_name ||
       project.teamName ||
@@ -74,11 +80,9 @@ function Judging() {
   const [projects, setProjects] = useState([]);
   const [criteria, setCriteria] = useState(criteriaFallback);
   const [completedReviews, setCompletedReviews] = useState([]);
-
   const [selected, setSelected] = useState(null);
   const [scores, setScores] = useState({});
   const [feedback, setFeedback] = useState("");
-
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -87,59 +91,40 @@ function Judging() {
     loadJudgingData();
   }, []);
 
-  const loadJudgingData = async () => {
+  async function loadJudgingData() {
     setLoading(true);
     setError("");
 
     try {
-      let token = localStorage.getItem("judgeToken");
+      const token = localStorage.getItem("hackhub_token");
 
-      /*
-       * Temporary seeded judge login for hackathon demo.
-       * Later this will come from the actual login page.
-       */
       if (!token) {
-        const loginResponse = await fetch(
-          "http://localhost:5000/api/auth/login",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              email: "judge@dogfood.local",
-              password: "judge123",
-            }),
-          }
-        );
-
-        const loginData = await loginResponse.json();
-
-        if (!loginResponse.ok) {
-          throw new Error(
-            loginData.message || "Judge login failed."
-          );
-        }
-
-        token = loginData.token;
-        localStorage.setItem("judgeToken", token);
+        navigate("/login", { replace: true });
+        return;
       }
 
       const assignments = await getMyAssignments(token);
 
-      const assignmentList =
-        assignments.assignments || assignments.projects || [];
+      const assignmentList = Array.isArray(assignments)
+        ? assignments
+        : assignments.assignments ||
+          assignments.projects ||
+          [];
 
       const normalizedProjects = assignmentList
-        .filter(
-          (assignment) =>
-            assignment.status !== "completed"
-        )
+        .filter((assignment) => {
+          const status = String(
+            assignment.status || ""
+          ).toLowerCase();
+
+          return status !== "completed";
+        })
         .map((assignment) =>
           normalizeProject(
             assignment.project || assignment
           )
-        );
+        )
+        .filter((project) => project.id != null);
 
       setProjects(normalizedProjects);
 
@@ -149,7 +134,8 @@ function Judging() {
             .map(
               (assignment) =>
                 assignment.project?.hackathon_id ||
-                assignment.hackathon_id
+                assignment.hackathon_id ||
+                assignment.project?.hackathonId
             )
             .filter(Boolean)
         ),
@@ -162,14 +148,14 @@ function Judging() {
         );
 
         if (
-          criteriaResponse.criteria &&
+          Array.isArray(criteriaResponse.criteria) &&
           criteriaResponse.criteria.length > 0
         ) {
           setCriteria(criteriaResponse.criteria);
         }
       }
     } catch (err) {
-      console.error(err);
+      console.error("Failed to load judging data:", err);
       setError(
         err.message ||
           "Unable to load judging assignments."
@@ -177,7 +163,7 @@ function Judging() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   const totalScore = criteria.reduce(
     (total, item) =>
@@ -191,36 +177,56 @@ function Judging() {
       scores[item.name] !== ""
   );
 
-  const handleScoreChange = (name, value) => {
-    setScores((prev) => ({
-      ...prev,
+  function handleScoreChange(name, value) {
+    setScores((previous) => ({
+      ...previous,
       [name]: value,
     }));
-  };
+  }
 
-  const openEvaluation = (project) => {
+  function openEvaluation(project) {
     setSelected(project);
     setScores({});
     setFeedback("");
     setError("");
-  };
+  }
 
-  const closeEvaluation = () => {
+  function closeEvaluation() {
     if (!submitting) {
       setSelected(null);
     }
-  };
+  }
 
-  const submitEvaluation = async (e) => {
-    e.preventDefault();
+  async function submitEvaluation(event) {
+    event.preventDefault();
 
     if (!selected || !allScoresEntered) return;
+
+    const invalidScore = criteria.some((item) => {
+      const score = Number(scores[item.name]);
+      const maxScore = Number(item.max_score) || 25;
+
+      return (
+        !Number.isFinite(score) ||
+        score < 0 ||
+        score > maxScore
+      );
+    });
+
+    if (invalidScore) {
+      setError("Please enter valid scores for every criterion.");
+      return;
+    }
 
     setSubmitting(true);
     setError("");
 
     try {
-      const token = localStorage.getItem("judgeToken");
+      const token = localStorage.getItem("hackhub_token");
+
+      if (!token) {
+        throw new Error("Please log in again.");
+      }
 
       const scoreList = criteria.map((criterion) => ({
         criterion_id: criterion.id,
@@ -236,16 +242,15 @@ function Judging() {
         token
       );
 
-      setCompletedReviews((prev) => [
-        ...prev,
+      setCompletedReviews((previous) => [
+        ...previous,
         selected.id,
       ]);
 
-      setProjects((prev) =>
-        prev.filter(
+      setProjects((previous) =>
+        previous.filter(
           (project) =>
-            String(project.id) !==
-            String(selected.id)
+            String(project.id) !== String(selected.id)
         )
       );
 
@@ -253,15 +258,14 @@ function Judging() {
       setScores({});
       setFeedback("");
     } catch (err) {
-      console.error(err);
+      console.error("Failed to submit evaluation:", err);
       setError(
-        err.message ||
-          "Unable to submit evaluation."
+        err.message || "Unable to submit evaluation."
       );
     } finally {
       setSubmitting(false);
     }
-  };
+  }
 
   return (
     <div className="judging-page">
@@ -292,10 +296,11 @@ function Judging() {
 
         {error && (
           <div
+            role="alert"
             style={{
-              marginBottom: "20px",
+              marginBottom: 20,
               padding: "12px 16px",
-              borderRadius: "8px",
+              borderRadius: 8,
               background: "#fee2e2",
               color: "#991b1b",
             }}
@@ -309,7 +314,6 @@ function Judging() {
             <div className="judging-stat-icon purple">
               <ClipboardCheck size={21} />
             </div>
-
             <div>
               <span>Pending Evaluations</span>
               <strong>{projects.length}</strong>
@@ -320,7 +324,6 @@ function Judging() {
             <div className="judging-stat-icon green">
               <CheckCircle size={21} />
             </div>
-
             <div>
               <span>Completed Evaluations</span>
               <strong>{completedReviews.length}</strong>
@@ -335,6 +338,17 @@ function Judging() {
               Select a project to begin its evaluation.
             </p>
           </div>
+
+          {!loading && (
+            <button
+              type="button"
+              className="judging-evaluate-btn"
+              onClick={loadJudgingData}
+              disabled={submitting}
+            >
+              Refresh Projects
+            </button>
+          )}
         </div>
 
         {loading ? (
@@ -369,13 +383,15 @@ function Judging() {
                     {project.hackathon}
                   </span>
 
+                  <p>{project.description}</p>
+
                   <div className="judging-tags">
                     {project.technologies.map(
-                      (tech, index) => (
+                      (technology, index) => (
                         <span
-                          key={`${tech}-${index}`}
+                          key={`${technology}-${index}`}
                         >
-                          {tech}
+                          {technology}
                         </span>
                       )
                     )}
@@ -384,9 +400,7 @@ function Judging() {
 
                 <button
                   className="judging-evaluate-btn"
-                  onClick={() =>
-                    openEvaluation(project)
-                  }
+                  onClick={() => openEvaluation(project)}
                 >
                   Evaluate
                 </button>
@@ -396,11 +410,20 @@ function Judging() {
         ) : (
           <div className="judging-empty">
             <CheckCircle size={38} />
-            <h2>All evaluations completed</h2>
+            <h2>No assigned projects found</h2>
             <p>
-              There are no more projects awaiting
-              evaluation.
+              Your submissions may exist, but this judge
+              account currently has no projects returned by
+              the assignment API. Check judge assignments
+              and backend access.
             </p>
+            <button
+              type="button"
+              className="judging-evaluate-btn"
+              onClick={loadJudgingData}
+            >
+              Try Again
+            </button>
           </div>
         )}
       </div>
@@ -415,20 +438,16 @@ function Judging() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="judging-modal-title"
-            onClick={(e) =>
-              e.stopPropagation()
-            }
+            onClick={(event) => event.stopPropagation()}
           >
             <div className="judging-modal-header">
               <div>
                 <span className="judging-hackathon">
                   {selected.hackathon}
                 </span>
-
                 <h2 id="judging-modal-title">
                   {selected.name}
                 </h2>
-
                 <p>{selected.team}</p>
               </div>
 
@@ -445,16 +464,14 @@ function Judging() {
             <form onSubmit={submitEvaluation}>
               <div className="judging-modal-body">
                 <h3>Project Description</h3>
-
                 <p className="judging-modal-description">
                   {selected.description}
                 </p>
 
                 <h3>Evaluation Criteria</h3>
-
                 <p className="judging-helper">
-                  Give each criterion a score from 0 to
-                  25.
+                  Give each criterion a score from 0 to its
+                  maximum allowed score.
                 </p>
 
                 <div className="judging-criteria">
@@ -465,15 +482,9 @@ function Judging() {
                     >
                       <div className="judging-criterion-heading">
                         <div>
-                          <strong>
-                            {item.name}
-                          </strong>
-
-                          <small>
-                            {item.description}
-                          </small>
+                          <strong>{item.name}</strong>
+                          <small>{item.description}</small>
                         </div>
-
                         <span>
                           / {item.max_score || 25}
                         </span>
@@ -481,26 +492,22 @@ function Judging() {
 
                       <div className="judging-score-input">
                         <Star size={17} />
-
                         <input
                           type="number"
                           min="0"
                           max={item.max_score || 25}
                           step="1"
                           required
-                          value={
-                            scores[item.name] ?? ""
-                          }
-                          onChange={(e) => {
-                            const value =
-                              e.target.value;
+                          value={scores[item.name] ?? ""}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            const maximum =
+                              Number(item.max_score) || 25;
 
                             if (
                               value === "" ||
                               (/^\d+$/.test(value) &&
-                                Number(value) <=
-                                  (item.max_score ||
-                                    25))
+                                Number(value) <= maximum)
                             ) {
                               handleScoreChange(
                                 item.name,
@@ -508,7 +515,7 @@ function Judging() {
                               );
                             }
                           }}
-                          placeholder="0-25"
+                          placeholder={`0-${item.max_score || 25}`}
                         />
                       </div>
                     </div>
@@ -517,10 +524,8 @@ function Judging() {
 
                 <div className="judging-total">
                   <span>Total Score</span>
-
                   <strong>
-                    {totalScore}{" "}
-                    <small>/ 100</small>
+                    {totalScore} <small>/ 100</small>
                   </strong>
                 </div>
 
@@ -528,13 +533,12 @@ function Judging() {
                   <label htmlFor="judge-feedback">
                     Judge's Feedback
                   </label>
-
                   <textarea
                     id="judge-feedback"
                     rows="4"
                     value={feedback}
-                    onChange={(e) =>
-                      setFeedback(e.target.value)
+                    onChange={(event) =>
+                      setFeedback(event.target.value)
                     }
                     placeholder="Share constructive feedback about this project..."
                   />
@@ -554,10 +558,7 @@ function Judging() {
                 <button
                   type="submit"
                   className="judging-submit-btn"
-                  disabled={
-                    !allScoresEntered ||
-                    submitting
-                  }
+                  disabled={!allScoresEntered || submitting}
                 >
                   {submitting
                     ? "Submitting..."
